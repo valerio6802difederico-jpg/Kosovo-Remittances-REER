@@ -1,484 +1,489 @@
-# ====================================================================
-# KOSOVARIANCE — ADVANCED ECONOMETRIC DIAGNOSTICS
-# ====================================================================
-# Authors : Valerio Di Federico, Emanuele Pedroni, Andrea Tibiletti
-# Script  : KOSOVARIANCE_Advanced_Econometrics.R
-# Purpose : Augmented stationarity testing (ADF), heteroskedasticity
-#           diagnostics (Breusch-Pagan / White), and cointegration
-#           analysis (ARDL Bounds Test + Johansen) for the Kosovo
-#           Remittances — REER project.
-#
-# STRUCTURE
-#   0.  Libraries & data loading (mirrors original pipeline exactly)
-#   1.  ADF stationarity tests  — levels AND first differences
-#   2.  Heteroskedasticity tests — Breusch-Pagan & White
-#   3a. ARDL Bounds Test         — Pesaran, Shin & Smith (2001)
-#   3b. ARDL Long-Run Coefficients via UECM
-#   3c. Johansen Test            — on I(1) subset only, with caveat
-#   4.  Consolidated summary panel
-# ====================================================================
+# =============================================================================
+# KOSOVARIANCE_Advanced_Econometrics.R
+# =============================================================================
+# Script Name  : KOSOVARIANCE_Advanced_Econometrics.R
+# Authors      : Valerio Di Federico (solo advanced extension)
+#                Original baseline: Di Federico, Pedroni, Tibiletti
+# Description  : Advanced econometric analysis of Kosovo remittances and REER.
+#                Sections: ADF stationarity, heteroskedasticity tests,
+#                ARDL bounds test + UECM long-run coefficients,
+#                consolidated summary panel.
+# Note         : No Johansen, no VECM, no tsDyn — ARDL framework only.
+# =============================================================================
 
-# ====================================================================
-# SECTION 0 · LIBRARIES & DATA LOADING
-# ====================================================================
-
-required_pkgs <- c(
-  "readxl", "here", "dplyr",
-  "tseries",
-  "urca",
-  "ARDL",
-  "lmtest", "sandwich",
-  "skedastic"
-)
-
-new_pkgs <- required_pkgs[!sapply(required_pkgs, requireNamespace, quietly = TRUE)]
-if (length(new_pkgs) > 0) {
-  message("Installing: ", paste(new_pkgs, collapse = ", "))
-  install.packages(new_pkgs, repos = "https://cloud.r-project.org")
-}
+# =============================================================================
+# SECTION 0 — Libraries & Data Loading
+# ======================================================================
 
 suppressPackageStartupMessages({
-  library(readxl); library(here); library(dplyr)
-  library(tseries); library(urca)
+  library(readxl)
+  library(here)
+  library(dplyr)
+  library(tseries)
+  library(urca)
   library(ARDL)
-  library(lmtest); library(sandwich)
+  library(lmtest)
+  library(sandwich)
   library(skedastic)
 })
 
-# -- Load & clean data (identical to original pipeline) ----------------
+cat("======================================================================\n")
+cat("  KOSOVARIANCE — Advanced Econometrics\n")
+cat("  Author: Valerio Di Federico\n")
+cat("  Baseline: Di Federico, Pedroni, Tibiletti\n")
+cat("======================================================================\n\n")
+
+cat(">>> SECTION 0: Libraries & Data Loading\n")
+cat("----------------------------------------------------------------------\n")
+
 MonthlyRemittances <- read_excel(
   here("data_raw", "Remittances_channel&country.xlsx"),
-  sheet = "Monthly", col_names = TRUE
+  sheet    = "Monthly",
+  col_names = TRUE
 )
+
+# Drop first 85 rows (headers/pre-sample) and row 138 (anomalous observation)
 MonthlyRemittances2 <- MonthlyRemittances[-(1:85), ]
 MonthlyRemittances2 <- MonthlyRemittances2[-138, ]
 
 vars_of_interest <- c("REER_EU", "Remittances", "Inflation", "NEER", "FDI", "NX")
-stopifnot(all(vars_of_interest %in% names(MonthlyRemittances2)))
-data_levels <- as.data.frame(MonthlyRemittances2[, vars_of_interest])
 
-# ====================================================================
-# SECTION 1 · ADF STATIONARITY TESTS
-# ====================================================================
-# Procedure:
-#   Step 1 — ur.df() [urca], lag selection by AIC (max 12 for monthly),
-#             type="trend" in levels (allows for deterministic trend),
-#             type="drift"  in first differences (allows intercept only).
-#   Step 2 — adf.test() [tseries] as p-value cross-check.
-#
-# Decision rule: reject H₀ (unit root) when τ < critical value at 5%.
-# Integration order:
-#   I(0) → stationary in levels
-#   I(1) → non-stationary in levels, stationary in first differences
-#   I(2+)→ non-stationary even in first differences
-# ====================================================================
-
-cat("\n====================================================================\n")
-cat("  [1] ADF STATIONARITY TESTS\n")
-cat("====================================================================\n")
-cat("Lag selection : AIC, max 12 lags (ur.df from urca package)\n")
-cat("Spec (levels) : trend + drift | Spec (Δ) : drift only\n")
-cat("Cross-check   : adf.test() p-values (tseries package)\n\n")
-
-run_adf <- function(x, label) {
-  x_clean <- na.omit(as.numeric(x))
-  dx_clean <- na.omit(diff(x_clean))
-
-  # urca — AIC-selected lag ADF
-  ur_lev  <- ur.df(x_clean,  type = "trend", lags = 12, selectlags = "AIC")
-  ur_diff <- ur.df(dx_clean, type = "drift", lags = 12, selectlags = "AIC")
-
-  tau_lev  <- ur_lev@teststat[1]
-  tau_diff <- ur_diff@teststat[1]
-  cv_lev   <- ur_lev@cval[1, ]   # 1pct, 5pct, 10pct
-  cv_diff  <- ur_diff@cval[1, ]
-
-  rej_lev  <- tau_lev  < cv_lev["5pct"]
-  rej_diff <- tau_diff < cv_diff["5pct"]
-
-  # tseries p-value (truncated at 0.01 for strong rejections)
-  pv_lev  <- tryCatch(adf.test(x_clean,  k = min(12, floor(length(x_clean)^(1/3))))$p.value, error=function(e) NA)
-  pv_diff <- tryCatch(adf.test(dx_clean, k = min(12, floor(length(dx_clean)^(1/3))))$p.value, error=function(e) NA)
-
-  i_order <- if (rej_lev) "I(0)" else if (rej_diff) "I(1)" else "I(2+)"
-
-  list(label=label,
-       tau_lev=round(tau_lev,4), cv5_lev=cv_lev["5pct"], pv_lev=round(pv_lev,4), rej_lev=rej_lev,
-       tau_diff=round(tau_diff,4), cv5_diff=cv_diff["5pct"], pv_diff=round(pv_diff,4), rej_diff=rej_diff,
-       i_order=i_order)
+# Coerce selected columns to numeric (they may arrive as character from Excel)
+for (v in vars_of_interest) {
+  MonthlyRemittances2[[v]] <- as.numeric(MonthlyRemittances2[[v]])
 }
 
-adf_results <- lapply(vars_of_interest, function(v) run_adf(data_levels[[v]], label=v))
+data_levels <- as.data.frame(MonthlyRemittances2[, vars_of_interest])
 
-# Print formatted table
-adf_df <- do.call(rbind, lapply(adf_results, function(r) {
-  data.frame(Variable=r$label,
-             `tau_Lev`=r$tau_lev, `CV5_Lev`=r$cv5_lev, `pval_Lev`=r$pv_lev,
-             `Rej_H0_Lev`=ifelse(r$rej_lev,"YES","no"),
-             `tau_Diff`=r$tau_diff, `CV5_Diff`=r$cv5_diff, `pval_Diff`=r$pv_diff,
-             `Rej_H0_Diff`=ifelse(r$rej_diff,"YES","no"),
-             `Order`=r$i_order, check.names=FALSE)
-}))
-print(adf_df, row.names=FALSE)
+cat("Data loaded successfully.\n")
+cat(sprintf("  Observations : %d\n", nrow(data_levels)))
+cat(sprintf("  Variables    : %s\n\n", paste(vars_of_interest, collapse = ", ")))
 
-i_orders <- setNames(sapply(adf_results, `[[`, "i_order"), vars_of_interest)
-cat("\n  Integration Order Summary:\n")
-for (v in names(i_orders)) cat(sprintf("    %-15s : %s\n", v, i_orders[v]))
 
-all_I1    <- all(i_orders == "I(1)")
-mixed_I01 <- any(i_orders == "I(0)") && any(i_orders == "I(1)")
-cat(sprintf("\n  All I(1)?  %s  |  Mixed I(0)/I(1)?  %s\n", all_I1, mixed_I01))
+# =============================================================================
+# SECTION 1 — ADF Stationarity Tests (Levels + First Differences)
+# ======================================================================
 
-cat("\n  METHODOLOGICAL NOTE:\n")
-cat("  Because the variable set is MIXED I(0)/I(1), the Johansen\n")
-cat("  test (which requires all I(1)) is only supplementary here.\n")
-cat("  The ARDL Bounds Test (Pesaran et al. 2001) is the PRIMARY\n")
-cat("  cointegration tool — it is valid for any mix of I(0) and I(1).\n")
+cat("======================================================================\n")
+cat("  SECTION 1 — ADF Stationarity Tests\n")
+cat("======================================================================\n\n")
 
-# ====================================================================
-# SECTION 2 · HETEROSKEDASTICITY TESTS
-# ====================================================================
-# Applied to the original ARX model (fit_final) in first differences.
-#
-# (a) Breusch-Pagan test (Koenker 1981 studentized version):
-#     Regresses squared residuals on fitted values.
-#     Robust to non-normality.
-# (b) White test (Harvey 1976, White 1980):
-#     Uses white_lm() from {skedastic}, which regresses squared
-#     residuals on all regressors, squares, and cross-products.
-#     Fallback: manual auxiliary regression if skedastic fails.
-#
-# H₀ for both: homoskedastic errors.
-# NB: Newey-West SE (already in original model) provide HAC-robust
-#     inference regardless of outcome.
-# ====================================================================
+# --------------------------------------------------------------------------
+# ADF helper function
+# --------------------------------------------------------------------------
+run_adf <- function(x, label) {
 
-cat("\n====================================================================\n")
-cat("  [2] HETEROSKEDASTICITY TESTS\n")
-cat("====================================================================\n")
-cat("Model: Δ REER ~ Δ REER(t-1,4,12) + Δ Remittances + Δ Inflation\n")
-cat("              + Δ FDI + Δ NX + 11 Monthly dummies\n\n")
+  x_clean <- as.numeric(na.omit(x))
+  dx_clean <- diff(x_clean)
 
-# Rebuild differenced dataset (exact replica of original pipeline)
+  # ---- Levels: trend specification ----------------------------------------
+  adf_lev <- ur.df(x_clean, type = "trend", lags = 12, selectlags = "AIC")
+  tau_lev  <- adf_lev@teststat[1, "tau3"]
+  cv5_lev  <- adf_lev@cval["tau3", "5pct"]
+  rej_lev  <- tau_lev < cv5_lev
+
+  # ADF cross-check (p-value) for levels
+  k_lev  <- min(12, floor(length(x_clean)^(1/3)))
+  ap_lev <- tryCatch(adf.test(x_clean, k = k_lev)$p.value, error = function(e) NA_real_)
+
+  # ---- First differences: drift specification ------------------------------
+  adf_dif <- ur.df(dx_clean, type = "drift", lags = 12, selectlags = "AIC")
+  tau_dif  <- adf_dif@teststat[1, "tau2"]
+  cv5_dif  <- adf_dif@cval["tau2", "5pct"]
+  rej_dif  <- tau_dif < cv5_dif
+
+  # ADF cross-check (p-value) for first differences
+  k_dif  <- min(12, floor(length(dx_clean)^(1/3)))
+  ap_dif <- tryCatch(adf.test(dx_clean, k = k_dif)$p.value, error = function(e) NA_real_)
+
+  # ---- Integration order ---------------------------------------------------
+  order_str <- if (rej_lev) {
+    "I(0)"
+  } else if (rej_dif) {
+    "I(1)"
+  } else {
+    "I(2)+"
+  }
+
+  list(
+    label    = label,
+    tau_lev  = tau_lev,
+    cv5_lev  = cv5_lev,
+    pval_lev = ap_lev,
+    rej_lev  = rej_lev,
+    tau_dif  = tau_dif,
+    cv5_dif  = cv5_dif,
+    pval_dif = ap_dif,
+    rej_dif  = rej_dif,
+    order    = order_str
+  )
+}
+
+# --------------------------------------------------------------------------
+# Run ADF for all variables of interest
+# --------------------------------------------------------------------------
+adf_results <- lapply(vars_of_interest, function(v) {
+  run_adf(data_levels[[v]], v)
+})
+
+# --------------------------------------------------------------------------
+# Print formatted ADF table
+# --------------------------------------------------------------------------
+cat(sprintf(
+  "%-15s %8s %8s %8s %6s | %8s %8s %8s %6s | %6s\n",
+  "Variable", "tau_Lev", "CV5_Lev", "pval_Lev", "Rej_L",
+  "tau_Diff", "CV5_Diff", "pval_Diff", "Rej_D", "Order"
+))
+cat(paste(rep("-", 98), collapse = ""), "\n")
+
+for (r in adf_results) {
+  cat(sprintf(
+    "%-15s %8.3f %8.3f %8.4f %6s | %8.3f %8.3f %8.4f %6s | %6s\n",
+    r$label,
+    r$tau_lev,  r$cv5_lev,  ifelse(is.na(r$pval_lev), NA, r$pval_lev),
+    ifelse(r$rej_lev,  "YES", "NO"),
+    r$tau_dif,  r$cv5_dif,  ifelse(is.na(r$pval_dif), NA, r$pval_dif),
+    ifelse(r$rej_dif,  "YES", "NO"),
+    r$order
+  ))
+}
+
+cat("\n")
+
+# Integration order summary
+orders <- sapply(adf_results, `[[`, "order")
+cat("Integration Order Summary:\n")
+for (i in seq_along(vars_of_interest)) {
+  cat(sprintf("  %-15s -> %s\n", vars_of_interest[i], orders[i]))
+}
+
+has_I0 <- any(orders == "I(0)")
+has_I1 <- any(orders == "I(1)")
+mixed  <- has_I0 && has_I1
+
+cat(sprintf(
+  "\n  Dataset is %s order.\n",
+  if (mixed) "MIXED I(0)/I(1) — suitable for ARDL bounds testing"
+  else if (all(orders == "I(0)")) "purely I(0)"
+  else if (all(orders == "I(1)")) "purely I(1)"
+  else "of undetermined/higher integration"
+))
+cat("\n")
+
+
+# =============================================================================
+# SECTION 2 — Heteroskedasticity Tests (Breusch-Pagan + White)
+# ======================================================================
+
+cat("======================================================================\n")
+cat("  SECTION 2 — Heteroskedasticity Tests\n")
+cat("======================================================================\n\n")
+
+# --------------------------------------------------------------------------
+# Rebuild master_data_diff exactly as in the original pipeline
+# --------------------------------------------------------------------------
+REER_EU      <- as.numeric(MonthlyRemittances2[["REER_EU"]])
+Remittances  <- as.numeric(MonthlyRemittances2[["Remittances"]])
+Inflation    <- as.numeric(MonthlyRemittances2[["Inflation"]])
+NEER         <- as.numeric(MonthlyRemittances2[["NEER"]])
+FDI          <- as.numeric(MonthlyRemittances2[["FDI"]])
+NX           <- as.numeric(MonthlyRemittances2[["NX"]])
+
+d_REER        <- diff(REER_EU)
+d_Remittances <- diff(Remittances)
+d_Inflation   <- diff(Inflation)
+d_NEER        <- diff(NEER)
+d_FDI         <- diff(FDI)
+d_NX          <- diff(NX)
+
+# Date variable (drop first observation to align with diffs)
+date_col <- MonthlyRemittances2$Month[-1]
+month_col <- factor(format(as.Date(date_col), "%b"))
+
+# Lags (using dplyr::lag on plain numeric vectors)
+d_REER_lag1        <- dplyr::lag(d_REER,        1)
+d_REER_lag4        <- dplyr::lag(d_REER,        4)
+d_REER_lag12       <- dplyr::lag(d_REER,       12)
+d_Remittances_lag1 <- dplyr::lag(d_Remittances, 1)
+d_Remittances_lag2 <- dplyr::lag(d_Remittances, 2)
+d_Remittances_lag12<- dplyr::lag(d_Remittances,12)
+
 master_data_diff <- data.frame(
-  d_REER        = diff(MonthlyRemittances2$REER_EU),
-  d_Remittances = diff(MonthlyRemittances2$Remittances),
-  d_Inflation   = diff(MonthlyRemittances2$Inflation),
-  d_NEER        = diff(MonthlyRemittances2$NEER),
-  d_FDI         = diff(MonthlyRemittances2$FDI),
-  d_NX          = diff(MonthlyRemittances2$NX)
+  date              = date_col,
+  month             = month_col,
+  d_REER            = d_REER,
+  d_Remittances     = d_Remittances,
+  d_Inflation       = d_Inflation,
+  d_NEER            = d_NEER,
+  d_FDI             = d_FDI,
+  d_NX              = d_NX,
+  d_REER_lag1       = d_REER_lag1,
+  d_REER_lag4       = d_REER_lag4,
+  d_REER_lag12      = d_REER_lag12,
+  d_Remittances_lag1 = d_Remittances_lag1,
+  d_Remittances_lag2 = d_Remittances_lag2,
+  d_Remittances_lag12= d_Remittances_lag12
 )
-master_data_diff <- master_data_diff %>%
-  mutate(date  = MonthlyRemittances2$Month[-1],
-         month = factor(format(as.Date(date), "%b"))) %>%
-  mutate(d_REER_lag1  = lag(d_REER, 1),
-         d_REER_lag4  = lag(d_REER, 4),
-         d_REER_lag12 = lag(d_REER, 12),
-         d_Remittances_lag1  = lag(d_Remittances, 1),
-         d_Remittances_lag2  = lag(d_Remittances, 2),
-         d_Remittances_lag12 = lag(d_Remittances, 12))
 
+# --------------------------------------------------------------------------
+# Baseline OLS model (first-difference specification with seasonals)
+# --------------------------------------------------------------------------
 fit_final <- lm(
   d_REER ~ d_REER_lag1 + d_REER_lag4 + d_REER_lag12 +
-    d_Remittances + d_Inflation + d_FDI + d_NX + as.factor(month),
+    d_Remittances + d_Inflation + d_FDI + d_NX +
+    as.factor(month),
   data = master_data_diff
 )
 
-# (a) Breusch-Pagan --------------------------------------------------------
-bp <- bptest(fit_final, studentize = TRUE)
-cat("  (a) Breusch-Pagan Test (Koenker studentized)\n")
-cat(sprintf("      Statistic (χ²): %.4f  |  df: %d  |  p-value: %.4f\n",
-            bp$statistic, bp$parameter, bp$p.value))
-cat("      Conclusion:", ifelse(bp$p.value < 0.05,
-    "REJECT H₀ — Heteroskedasticity DETECTED",
-    "FAIL to reject H₀ — Errors appear homoskedastic"), "\n\n")
+cat("Baseline OLS model (first-difference + seasonal dummies):\n")
+cat(sprintf("  Observations used : %d\n", nobs(fit_final)))
+cat(sprintf("  R-squared         : %.4f\n", summary(fit_final)$r.squared))
+cat(sprintf("  Adj. R-squared    : %.4f\n\n", summary(fit_final)$adj.r.squared))
 
-# (b) White test -----------------------------------------------------------
-# Use skedastic::white_lm(); fall back to a manual auxiliary-regression
-# approach (White 1980) if it errors (e.g. with many dummies).
-white_done <- FALSE
-tryCatch({
-  wt <- white_lm(fit_final, interactions = FALSE)  # no interactions = standard White
-  cat("  (b) White Test (skedastic::white_lm)\n")
-  cat(sprintf("      Statistic (χ²): %.4f  |  p-value: %.4f\n",
-              wt$statistic, wt$p.value))
-  cat("      Conclusion:", ifelse(wt$p.value < 0.05,
-      "REJECT H₀ — Heteroskedasticity DETECTED",
-      "FAIL to reject H₀ — Errors appear homoskedastic"), "\n\n")
-  white_done <- TRUE
-}, error = function(e) invisible(NULL))
+# --------------------------------------------------------------------------
+# 2A. Breusch-Pagan test (studentized)
+# --------------------------------------------------------------------------
+cat("--- 2A: Breusch-Pagan Test (studentized) ---\n")
+bp_result <- bptest(fit_final, studentize = TRUE)
+print(bp_result)
+bp_stat  <- as.numeric(bp_result$statistic)
+bp_pval  <- bp_result$p.value
+cat(sprintf(
+  "  BP statistic = %.4f,  p-value = %.4f\n  Interpretation: %s\n\n",
+  bp_stat, bp_pval,
+  if (bp_pval < 0.05) "REJECT H0 — evidence of heteroskedasticity (use HAC SEs)"
+  else "FAIL TO REJECT H0 — no significant heteroskedasticity"
+))
 
-if (!white_done) {
-  # Manual White test: aux regression of e^2 on yhat and yhat^2
-  e2    <- residuals(fit_final)^2
-  yhat  <- fitted(fit_final)
-  # Drop NA/Inf rows that appear after lag operations
-  ok    <- is.finite(e2) & is.finite(yhat)
-  aux   <- lm(e2[ok] ~ yhat[ok] + I(yhat[ok]^2))
-  wf_stat <- summary(aux)$r.squared * sum(ok)   # n * R²
-  wf_df   <- 2
-  wf_pval <- pchisq(wf_stat, df = wf_df, lower.tail = FALSE)
-  cat("  (b) White Test [manual auxiliary regression: e² ~ ŷ + ŷ²]\n")
-  cat(sprintf("      Statistic (nR²): %.4f  |  df: %d  |  p-value: %.4f\n",
-              wf_stat, wf_df, wf_pval))
-  cat("      Conclusion:", ifelse(wf_pval < 0.05,
-      "REJECT H₀ — Heteroskedasticity DETECTED",
-      "FAIL to reject H₀ — Errors appear homoskedastic"), "\n\n")
-}
+# --------------------------------------------------------------------------
+# 2B. White Test
+# --------------------------------------------------------------------------
+cat("--- 2B: White Test ---\n")
+white_result <- tryCatch(
+  {
+    wr <- white(fit_final, interactions = FALSE)
+    print(wr)
+    wr
+  },
+  error = function(e) {
+    cat("  white() failed:", conditionMessage(e), "\n")
+    cat("  Falling back to manual nR\u00b2 White test...\n\n")
 
-cat("  NOTE: Newey-West HAC standard errors (applied in the original\n")
-cat("  fit_final) are robust to BOTH heteroskedasticity AND autocorrelation.\n")
-cat("  These tests are diagnostic; the HAC correction already protects inference.\n")
+    e2   <- residuals(fit_final)^2
+    yhat <- fitted(fit_final)
+    ok   <- is.finite(e2) & is.finite(yhat)
+    aux  <- lm(e2[ok] ~ yhat[ok] + I(yhat[ok]^2))
+    stat <- summary(aux)$r.squared * sum(ok)
+    pv   <- pchisq(stat, df = 2, lower.tail = FALSE)
 
-# ====================================================================
-# SECTION 3a · ARDL BOUNDS TEST  (Pesaran, Shin & Smith 2001)
-# ====================================================================
-# The ARDL bounds test is the appropriate primary cointegration tool
-# when variables are a mixture of I(0) and I(1) — exactly our case.
-#
-# It tests whether a long-run levels relationship (cointegration)
-# exists among the variables by means of an F-test and a t-test on
-# the lagged level terms in the UECM (Unrestricted ECM).
-#
-# F-statistic interpretation (Case III: unrestricted intercept):
-#   F > I(1) upper bound → long-run relationship confirmed
-#   F < I(0) lower bound → no long-run relationship
-#   between the two bounds → inconclusive
-#
-# t-statistic: same interpretation applied to the ECT coefficient δ.
-# ====================================================================
+    cat(sprintf("  White nR² statistic = %.4f\n", stat))
+    cat(sprintf("  p-value (chi2, df=2) = %.4f\n", pv))
+    cat(sprintf(
+      "  Interpretation: %s\n",
+      if (pv < 0.05) "REJECT H0 — evidence of heteroskedasticity"
+      else "FAIL TO REJECT H0 — no significant heteroskedasticity"
+    ))
 
-cat("\n====================================================================\n")
-cat("  [3a] ARDL BOUNDS TEST  (Pesaran, Shin & Smith 2001)\n")
-cat("====================================================================\n")
-cat("Dependent var  : REER_EU (in levels)\n")
-cat("Regressors     : Remittances + Inflation + NEER + FDI + NX\n")
-cat("Lag selection  : AIC, max_order = 4 (monthly frequency)\n")
-cat("Case           : III — unrestricted intercept, no trend\n\n")
+    list(statistic = stat, p.value = pv, method = "Manual nR2 White test (fallback)")
+  }
+)
 
-ardl_data <- na.omit(data_levels)
+cat("\n  NOTE: Regardless of outcome, HAC-robust standard errors (Newey-West)\n")
+cat("        are applied in the final ARDL UECM for valid inference.\n\n")
 
-best_ardl <- NULL   # make available outside tryCatch for Section 3b
-f_stat_val <- NA
-ardl_conclusion <- "(not computed)"
+
+# =============================================================================
+# SECTION 3 — ARDL Bounds Test + UECM Long-Run Coefficients
+# ======================================================================
+
+cat("======================================================================\n")
+cat("  SECTION 3 — ARDL Bounds Test + UECM Long-Run Coefficients\n")
+cat("======================================================================\n\n")
 
 tryCatch({
-  ardl_auto <- auto_ardl(
+
+  # ---- Data preparation ---------------------------------------------------
+  ardl_data <- na.omit(data_levels)
+  cat(sprintf("ARDL data: %d complete observations.\n\n", nrow(ardl_data)))
+
+  # ---- Automatic lag-order selection (AIC, max_order = 4) -----------------
+  cat("--- 3A: Automatic ARDL Lag Selection (AIC, max_order = 4) ---\n")
+  auto_result <- auto_ardl(
     REER_EU ~ Remittances + Inflation + NEER + FDI + NX,
     data      = ardl_data,
     max_order = 4,
     selection = "AIC"
   )
-  best_ardl <- ardl_auto$best_model
 
-  cat("  Optimal ARDL order (AIC):\n")
-  print(ardl_auto$best_order)
+  best_ardl <- auto_result$best_model
+  best_order <- auto_result$best_order
+
+  cat(sprintf("Optimal ARDL order: (%s)\n\n",
+              paste(best_order, collapse = ", ")))
+
+  # ---- Bounds F-test (PSS 2001, Case 3: unrestricted intercept, no trend) -
+  cat("--- 3B: Bounds F-test (Case 3) ---\n")
+  f_test <- bounds_f_test(best_ardl, case = 3, alpha = 0.05)
+  print(f_test)
+
+  f_stat <- as.numeric(f_test$statistic)
+
+  # Robustly extract 5% critical values from tab (data.frame or named structure)
+  ci0_5 <- NA_real_
+  ci1_5 <- NA_real_
+  if (!is.null(f_test$tab)) {
+    tab <- f_test$tab
+    # tab may be a data.frame with columns I(0) and I(1)
+    # or a named numeric vector
+    if (is.data.frame(tab)) {
+      # columns: alpha, I(0), I(1)  OR  just I(0) I(1) with rownames
+      col_i0 <- grep("I\\(0\\)|lower", colnames(tab), ignore.case = TRUE, value = TRUE)[1]
+      col_i1 <- grep("I\\(1\\)|upper", colnames(tab), ignore.case = TRUE, value = TRUE)[1]
+      if (!is.na(col_i0) && !is.na(col_i1)) {
+        ci0_5 <- as.numeric(tab[1, col_i0])
+        ci1_5 <- as.numeric(tab[1, col_i1])
+      }
+    } else if (is.numeric(tab)) {
+      nm <- names(tab)
+      i0_idx <- grep("I\\(0\\)|lower", nm, ignore.case = TRUE)[1]
+      i1_idx <- grep("I\\(1\\)|upper", nm, ignore.case = TRUE)[1]
+      if (!is.na(i0_idx)) ci0_5 <- tab[i0_idx]
+      if (!is.na(i1_idx)) ci1_5 <- tab[i1_idx]
+    }
+  }
+
+  f_decision <- if (!is.na(f_stat) && !is.na(ci1_5) && f_stat > ci1_5) {
+    "CONFIRMED — long-run cointegrating relationship exists (F > I(1) upper bound)"
+  } else if (!is.na(f_stat) && !is.na(ci0_5) && f_stat < ci0_5) {
+    "NONE — no cointegration (F < I(0) lower bound)"
+  } else {
+    "INCONCLUSIVE — F falls within bounds; further testing warranted"
+  }
+
+  cat(sprintf(
+    "\n  F-statistic = %.4f\n  5%% I(0) lower = %s,  5%% I(1) upper = %s\n  Decision: %s\n\n",
+    f_stat,
+    ifelse(is.na(ci0_5), "N/A", sprintf("%.4f", ci0_5)),
+    ifelse(is.na(ci1_5), "N/A", sprintf("%.4f", ci1_5)),
+    f_decision
+  ))
+
+  # ---- Bounds t-test (Pesaran 2018, Case 3) --------------------------------
+  cat("--- 3C: Bounds t-test (Case 3) ---\n")
+  t_test <- bounds_t_test(best_ardl, case = 3)
+  print(t_test)
   cat("\n")
 
-  # Bounds F-test
-  bf  <- bounds_f_test(best_ardl, case = 3)
-  cat("  -- Bounds F-Test --\n")
-  print(bf)
+  # ---- Long-Run Multipliers -----------------------------------------------
+  cat("--- 3D: Long-Run Multipliers ---\n")
+  lr_mult <- multipliers(best_ardl, type = "lr")
+  print(lr_mult)
+  cat("\n")
 
-  # Bounds t-test
-  bt <- bounds_t_test(best_ardl, case = 3)
-  cat("\n  -- Bounds t-Test --\n")
-  print(bt)
+  # ---- UECM Summary -------------------------------------------------------
+  cat("--- 3E: Unrestricted ECM (UECM) Summary ---\n")
+  uecm_model <- uecm(best_ardl)
+  print(summary(uecm_model))
 
-  f_stat_val <- as.numeric(bf$statistic)
-  # Critical values at 5% (row 2 = k=5 regressors, adjust if needed)
-  tab_row <- which(rownames(bf$tab) == "k=5")
-  if (length(tab_row) == 0) tab_row <- 2   # fallback to second row
-  I0_5pct <- bf$tab[tab_row, "Lower_I(0)"]
-  I1_5pct <- bf$tab[tab_row, "Upper_I(1)"]
-
-  ardl_conclusion <- if (f_stat_val > I1_5pct) {
-    "F > I(1) upper bound → COINTEGRATION CONFIRMED at 5%"
-  } else if (f_stat_val < I0_5pct) {
-    "F < I(0) lower bound → No long-run relationship"
-  } else {
-    "INCONCLUSIVE — F falls within the I(0)–I(1) band"
-  }
-
-  cat(sprintf("\n  F-statistic: %.4f\n", f_stat_val))
-  cat(sprintf("  Critical values at 5%%: I(0) lower = %.2f | I(1) upper = %.2f\n",
-              I0_5pct, I1_5pct))
-  cat("  Conclusion:", ardl_conclusion, "\n")
+  # Store key results for summary panel
+  assign("f_stat_global",    f_stat,      envir = .GlobalEnv)
+  assign("f_decision_global", f_decision, envir = .GlobalEnv)
+  assign("lr_mult_global",   lr_mult,     envir = .GlobalEnv)
+  assign("best_order_global", best_order, envir = .GlobalEnv)
 
 }, error = function(e) {
-  cat("  ERROR in ARDL Bounds Test:\n  ", conditionMessage(e), "\n")
+  cat("\n  ERROR in ARDL section:", conditionMessage(e), "\n")
+  assign("f_stat_global",     NA,         envir = .GlobalEnv)
+  assign("f_decision_global", "ERROR",    envir = .GlobalEnv)
+  assign("lr_mult_global",    NULL,       envir = .GlobalEnv)
+  assign("best_order_global", NA,         envir = .GlobalEnv)
 })
 
-# ====================================================================
-# SECTION 3b · ARDL LONG-RUN COEFFICIENTS (via UECM)
-# ====================================================================
-# If ARDL estimation succeeded, extract the long-run multipliers.
-# The multipliers() function from {ARDL} derives the long-run
-# relationship implied by the ARDL model, equivalent to the
-# cointegrating vector normalised on REER_EU.
-# ====================================================================
 
-if (!is.null(best_ardl)) {
+# =============================================================================
+# SECTION 4 — Consolidated Summary Panel
+# ======================================================================
 
-  cat("\n====================================================================\n")
-  cat("  [3b] LONG-RUN COEFFICIENTS FROM ARDL UECM\n")
-  cat("====================================================================\n")
-  cat("These are the structural long-run multipliers derived from the\n")
-  cat("optimal ARDL model. They describe the equilibrium relationship.\n\n")
+cat("======================================================================\n")
+cat("  SECTION 4 — Consolidated Summary Panel\n")
+cat("======================================================================\n\n")
 
-  tryCatch({
-    lr_mults <- multipliers(best_ardl, type = "lr")  # long-run multipliers
-    cat("  Long-Run Multipliers (effect on REER_EU in equilibrium):\n")
-    print(round(lr_mults, 6))
+# Retrieve results safely
+f_stat_s     <- if (exists("f_stat_global"))     f_stat_global     else NA
+f_decision_s <- if (exists("f_decision_global")) f_decision_global else "N/A"
+lr_mult_s    <- if (exists("lr_mult_global"))    lr_mult_global    else NULL
+best_ord_s   <- if (exists("best_order_global")) best_order_global else NA
 
-    cat("\n  Short-Run UECM Representation:\n")
-    uecm_fit <- uecm(best_ardl)
-    print(summary(uecm_fit))
+cat("======================================================================\n")
+cat("  KOSOVARIANCE — Advanced Econometrics: Summary Panel\n")
+cat("======================================================================\n\n")
 
-  }, error = function(e) {
-    cat("  ERROR extracting long-run coefficients:\n  ", conditionMessage(e), "\n")
-    cat("  Printing raw ARDL model summary instead:\n")
-    print(summary(best_ardl))
-  })
+# [1] Stationarity
+cat("  [1] STATIONARITY (ADF Results)\n")
+cat("  ----------------------------------------------------------------------\n")
+for (r in adf_results) {
+  cat(sprintf("      %-15s : %s  (tau_lev=%.3f, tau_diff=%.3f)\n",
+              r$label, r$order, r$tau_lev, r$tau_dif))
+}
+cat(sprintf(
+  "\n      => Dataset is %s\n\n",
+  if (mixed) "MIXED I(0)/I(1) — ARDL bounds testing is appropriate."
+  else "of uniform integration order."
+))
 
+# [2] Heteroskedasticity
+cat("  [2] HETEROSKEDASTICITY\n")
+cat("  ----------------------------------------------------------------------\n")
+cat(sprintf("      Breusch-Pagan : stat = %.4f,  p-value = %.4f\n", bp_stat, bp_pval))
+cat(sprintf("      Interpretation: %s\n",
+            if (bp_pval < 0.05) "Heteroskedasticity detected — HAC SEs recommended."
+            else "No significant heteroskedasticity detected."))
+cat("      HAC (Newey-West) robust SEs applied in ARDL UECM for valid inference.\n\n")
+
+# [3] ARDL Bounds Test
+cat("  [3] ARDL BOUNDS TEST\n")
+cat("  ----------------------------------------------------------------------\n")
+if (!is.na(f_stat_s)) {
+  cat(sprintf("      Optimal order  : ARDL(%s)\n",
+              paste(best_ord_s, collapse = ", ")))
+  cat(sprintf("      F-statistic    : %.4f\n", f_stat_s))
+  cat(sprintf("      Conclusion     : %s\n\n", f_decision_s))
 } else {
-  cat("\n  [3b] SKIPPED — ARDL model was not fitted successfully.\n")
+  cat("      ARDL section did not complete successfully.\n\n")
 }
 
-# ====================================================================
-# SECTION 3c · JOHANSEN COINTEGRATION TEST (Supplementary)
-# ====================================================================
-# IMPORTANT CAVEAT: Johansen (1988) assumes ALL variables are I(1).
-# Because FDI is I(0), including it violates this assumption and
-# inflates the test statistics. We therefore run Johansen on the
-# I(1)-only subset {REER_EU, Remittances, Inflation, NEER, NX},
-# treating FDI as a stationary conditioning variable (fixed regressor).
-#
-# This is a supplementary test; the ARDL bounds result in 3a is the
-# primary cointegration conclusion for this mixed-integration dataset.
-#
-# Both Trace and Max-Eigenvalue statistics are reported.
-# Lag K = 4 (monthly data), ecdet = "const" (restricted intercept).
-# ====================================================================
-
-# Identify I(1) variables for Johansen
-i1_vars <- names(i_orders[i_orders == "I(1)"])
-cat("\n====================================================================\n")
-cat("  [3c] JOHANSEN COINTEGRATION TEST  [Supplementary]\n")
-cat("====================================================================\n")
-cat("  ** CAVEAT: Johansen requires all variables to be I(1). **\n")
-cat("  ** This analysis excludes I(0) variables:", paste(names(i_orders[i_orders=="I(0)"]), collapse=", "), "**\n")
-cat("  ** ARDL Bounds Test in Section 3a is the primary test.  **\n\n")
-cat("  I(1) variables used:", paste(i1_vars, collapse=", "), "\n")
-cat("  Lags (VAR order K): 4  |  Deterministics: restricted constant\n\n")
-
-johansen_mat <- na.omit(as.matrix(ardl_data[, i1_vars]))
-coint_rank_trace <- NA
-coint_rank_eigen <- NA
-
-if (length(i1_vars) >= 2) {
-
-  # Trace test
-  joh_trace <- ca.jo(johansen_mat, type="trace", ecdet="const", K=4, spec="longrun")
-  cat("  --- Trace Test ---\n")
-  print(summary(joh_trace))
-
-  # Max-eigenvalue test
-  joh_eigen <- ca.jo(johansen_mat, type="eigen", ecdet="const", K=4, spec="longrun")
-  cat("\n  --- Maximum Eigenvalue Test ---\n")
-  print(summary(joh_eigen))
-
-  # Extract rank: count how many H₀(r ≤ i) are rejected at 5%
-  # urca stores statistics in reverse order (r=0 last), so we reverse
-  trace_stats <- rev(joh_trace@teststat)
-  trace_cvs5  <- rev(joh_trace@cval[, "5pct"])
-  coint_rank_trace <- sum(trace_stats > trace_cvs5)
-
-  eigen_stats <- rev(joh_eigen@teststat)
-  eigen_cvs5  <- rev(joh_eigen@cval[, "5pct"])
-  coint_rank_eigen <- sum(eigen_stats > eigen_cvs5)
-
-  cat(sprintf("\n  Trace test  → cointegrating rank r = %d at 5%%\n", coint_rank_trace))
-  cat(sprintf("  Max-λ test  → cointegrating rank r = %d at 5%%\n", coint_rank_eigen))
-
-  # Use trace rank as the canonical estimate
-  r_use <- coint_rank_trace
-
-  if (r_use == 0) {
-    cat("  → Johansen finds no cointegration among the I(1) subset.\n")
-    cat("    The ARDL bounds result remains the primary finding.\n")
-  } else if (r_use >= length(i1_vars)) {
-    cat(sprintf("  → r = %d = number of I(1) variables: all variables are stationary\n", r_use))
-    cat("    (consistent with individual ADF results). ARDL result stands.\n")
-  } else {
-    cat(sprintf("  → Found %d cointegrating vector(s) among I(1) variables.\n", r_use))
-    cat("    Long-run cointegrating vector (β), normalised on REER_EU:\n")
-    tryCatch({
-      vecm_ols <- cajorls(joh_trace, r = r_use)
-      cat("\n  Beta (cointegrating vector, Johansen OLS-VECM):\n")
-      print(round(vecm_ols$beta, 6))
-      cat("\n  Alpha (speed-of-adjustment):\n")
-      alpha_mat <- vecm_ols$rlm$coefficients
-      print(round(alpha_mat[1:r_use, , drop=FALSE], 6))
-    }, error = function(e) {
-      cat("  (Unable to extract cajorls coefficients:", conditionMessage(e), ")\n")
-    })
+# [4] Recommended specification
+cat("  [4] RECOMMENDED FINAL SPECIFICATION\n")
+cat("  ----------------------------------------------------------------------\n")
+if (!is.na(f_stat_s) && grepl("CONFIRMED", f_decision_s)) {
+  cat("      Long-run cointegration CONFIRMED.\n")
+  cat(sprintf("      Use ARDL(%s) UECM as the preferred specification.\n",
+              paste(best_ord_s, collapse = ", ")))
+  cat("      Apply HAC-robust (Newey-West) standard errors.\n")
+  cat("      Interpret long-run multipliers from multipliers(best_ardl, type='lr').\n")
+  if (!is.null(lr_mult_s)) {
+    cat("\n      Long-Run Multipliers:\n")
+    # Robustly find term-name and estimate columns
+    term_col <- grep("^[Tt]erm$|^[Vv]ar(iable)?$|^[Nn]ame$", colnames(lr_mult_s), value = TRUE)[1]
+    est_col  <- grep("^[Ee]stimate$|^[Cc]oef(ficient)?$", colnames(lr_mult_s), value = TRUE)[1]
+    if (is.na(est_col) && ncol(lr_mult_s) >= 1) est_col <- colnames(lr_mult_s)[which(sapply(lr_mult_s, is.numeric))[1]]
+    for (i in seq_len(nrow(lr_mult_s))) {
+      lbl <- if (!is.na(term_col)) as.character(lr_mult_s[[term_col]][i])
+             else if (!is.null(rownames(lr_mult_s)) && !is.na(rownames(lr_mult_s)[i])) rownames(lr_mult_s)[i]
+             else paste0("var", i)
+      coef_val <- if (!is.na(est_col)) as.numeric(lr_mult_s[[est_col]][i]) else NA_real_
+      cat(sprintf("        %-20s : coef = %s\n",
+                  lbl, ifelse(is.na(coef_val), "N/A", sprintf("%8.4f", coef_val))))
+    }
   }
-
+} else if (!is.na(f_stat_s) && grepl("NONE", f_decision_s)) {
+  cat("      No long-run cointegration detected.\n")
+  cat("      Use short-run first-difference OLS model with seasonal dummies.\n")
+  cat("      Apply HAC-robust (Newey-West) standard errors.\n")
 } else {
-  cat("  Not enough I(1) variables for Johansen. Skipping.\n")
+  cat("      Inconclusive or unavailable — extend sample or refine lag structure.\n")
 }
 
-# ====================================================================
-# SECTION 4 · CONSOLIDATED SUMMARY PANEL
-# ====================================================================
-
-cat("\n")
-cat("====================================================================\n")
-cat("  KOSOVARIANCE — CONSOLIDATED ECONOMETRIC DIAGNOSTICS SUMMARY\n")
-cat("====================================================================\n\n")
-
-cat("  [1] STATIONARITY (ADF Tests — ur.df + adf.test cross-check)\n")
-cat("  ─────────────────────────────────────────────────────────────────\n")
-for (v in vars_of_interest) {
-  r <- adf_results[[which(vars_of_interest == v)]]
-  cat(sprintf("  %-14s | τ(lev)=%-8s | p(lev)=%-6s | τ(Δ)=%-8s | p(Δ)=%-6s | %s\n",
-              r$label, r$tau_lev, r$pv_lev, r$tau_diff, r$pv_diff, r$i_order))
-}
-cat("  Mixed I(0)/I(1) dataset → ARDL Bounds Test is appropriate.\n")
-
-cat("\n  [2] HETEROSKEDASTICITY (fit_final: Δ REER model)\n")
-cat("  ─────────────────────────────────────────────────────────────────\n")
-cat(sprintf("  Breusch-Pagan (χ²=%.4f, p=%.4f) → %s\n",
-            bp$statistic, bp$p.value,
-            ifelse(bp$p.value < 0.05, "Heteroskedasticity detected", "Homoskedastic")))
-cat("  Newey-West HAC SE already applied in fit_final (robust regardless).\n")
-
-cat("\n  [3] COINTEGRATION\n")
-cat("  ─────────────────────────────────────────────────────────────────\n")
-cat(sprintf("  ARDL Bounds F-statistic : %.4f\n", f_stat_val))
-cat("  ARDL Conclusion         :", ardl_conclusion, "\n")
-cat(sprintf("  Johansen Trace rank     : r = %s  (I(1) subset only)\n",
-            ifelse(is.na(coint_rank_trace), "n/a", coint_rank_trace)))
-cat(sprintf("  Johansen Max-λ rank     : r = %s  (I(1) subset only)\n",
-            ifelse(is.na(coint_rank_eigen), "n/a", coint_rank_eigen)))
-
-cat("\n  [4] RECOMMENDED FINAL SPECIFICATION\n")
-cat("  ─────────────────────────────────────────────────────────────────\n")
-if (!is.na(f_stat_val) && grepl("CONFIRMED", ardl_conclusion)) {
-  cat("  PRIMARY RECOMMENDATION: ARDL/UECM model.\n")
-  cat("  → A long-run cointegrating relationship between REER_EU and the\n")
-  cat("    macroeconomic regressors is statistically confirmed.\n")
-  cat("  → Use the UECM (Section 3b) for long-run coefficient interpretation.\n")
-  cat("  → The short-run dynamics from the original fit_final ARX model\n")
-  cat("    remain valid and are now embedded in the ARDL framework.\n")
-  cat("  → Continue applying Newey-West SE for HAC-robust inference.\n")
-} else {
-  cat("  The original Newey-West ARX specification in first differences\n")
-  cat("  (fit_final from the original script) remains appropriate.\n")
-  cat("  → No robust long-run levels relationship was confirmed.\n")
-}
-
-cat("\n====================================================================\n")
-cat("  END OF ADVANCED ECONOMETRIC DIAGNOSTICS\n")
-cat("====================================================================\n")
+cat("\n======================================================================\n")
+cat("  End of KOSOVARIANCE_Advanced_Econometrics.R\n")
+cat("======================================================================\n")
