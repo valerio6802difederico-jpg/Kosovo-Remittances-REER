@@ -2,6 +2,7 @@
 
 ![R Version](https://img.shields.io/badge/R-4.5.2-276DC3?style=flat-square&logo=r&logoColor=white)
 ![Methodology](https://img.shields.io/badge/Methodology-ARDL%20Bounds%20Test-4CAF50?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 ---
 
@@ -164,6 +165,12 @@ rmarkdown::render("report/Report.Rmd", output_format = "pdf_document")
 4. Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
 5. Breusch, T. S., & Pagan, A. R. (1979). A simple test for heteroscedasticity and random coefficient variation. *Econometrica*, 47(5), 1287–1294.
 6. World Bank. (2024). *Migration and Development Brief 41: Remittances Remain Resilient*. Washington, D.C.: World Bank Group.
+
+---
+
+## 📝 License
+
+This project is licensed under the **MIT License**. You are free to use, modify, and distribute the code and written content with attribution.
 
 ---
 
