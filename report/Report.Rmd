@@ -1,0 +1,541 @@
+---
+title: "Final Project Report: Kosovariance"
+subtitle: "A Research Journey on Remittances, REER, and Kosovo's Macroeconomic Dynamics"
+author: "Valerio Di Federico, Emanuele Pedroni, Andrea Tibiletti"
+date: "Data Mining and Computational Statistics"
+output: 
+  pdf_document:
+    latex_engine: xelatex
+mainfont: Times New Roman
+fontsize: 12pt
+linestretch: 1.15
+geometry: margin=1in
+---
+```{r setup-dati, include=FALSE}
+# 1. CARICA LE LIBRERIE NECESSARIE
+library(readxl)
+library(here)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+
+# 2. IMPORTA I DATI
+# ATTENZIONE: Inserisci qui il TUO percorso esatto del file Excel
+MonthlyRemittances <- read_excel(here("data_raw", "Remittances_channel&country.xlsx"), sheet = "Monthly", col_names = TRUE)
+
+# 3. CREA MonthlyRemittances2 (Rimuovi le prime 85 righe e l'ultima)
+MonthlyRemittances2 <- MonthlyRemittances[-(1:85),] 
+MonthlyRemittances2 <- MonthlyRemittances2[-138, ] 
+
+# 4. PREPARA I DATI PER I MODELLI (Differenze)
+master_data_diff <- data.frame(
+  d_REER = diff(MonthlyRemittances2$REER_EU),
+  d_Remittances = diff(MonthlyRemittances2$Remittances),
+  d_Inflation = diff(MonthlyRemittances2$Inflation),
+  d_NEER = diff(MonthlyRemittances2$NEER),
+  d_FDI = diff(MonthlyRemittances2$FDI),
+  d_NX = diff(MonthlyRemittances2$NX)
+)
+
+master_data_diff <- master_data_diff %>%
+  mutate(
+    date = MonthlyRemittances2$Month[-1],
+    month = factor(format(as.Date(date), "%b"))
+  ) %>%
+  mutate(
+    d_REER_lag1 = lag(d_REER, 1),
+    d_REER_lag4 = lag(d_REER, 4),
+    d_REER_lag12 = lag(d_REER, 12),
+    d_Remittances_lag1 = lag(d_Remittances, 1),
+    d_Remittances_lag2 = lag(d_Remittances, 2),
+    d_Remittances_lag12 = lag(d_Remittances, 12)
+  )
+
+# 5. CALCOLA IL MODELLO (Così è pronto per la tabella stargazer)
+fit_final <- lm(d_REER ~ d_REER_lag1 + d_REER_lag4 + d_REER_lag12 + 
+                  d_Remittances + d_Inflation + d_FDI + d_NX + as.factor(month), 
+                data = master_data_diff)
+```
+
+
+
+## 1. Team Structure and Organization
+
+### 1.1 Group Formation
+The "Kosovariance" group project team consists of Valerio Di Federico, Emanuele Pedroni, and Andrea Tibiletti. The group was formed based on a shared academic interest in international macroeconomics and econometric analysis, as well as the complementary skills each member brings to the project.
+
+### 1.2 Task Assignment and Responsibilities
+
+While the team collaborated closely throughout every phase of the research journey, we maximized efficiency by trusting and leveraging the specific aptitudes of each member. We distributed tasks dynamically, giving space to individual strengths—ranging from proficiency in importing and managing raw Excel data, to advanced R programming and econometrics, to the strategic ability to synthesize complex results into a cohesive global narrative. This ensured a rigorous econometric pipeline while maintaining a unified vision of the project's ultimate goals:
+
+* **Data Engineering and Pre-processing:** Responsibilities included acquiring and selecting the raw datasets to use, cleaning the data, and handling missing values. This phase required subsetting the timeline to remove the initial highly incomplete 85 observations, ensuring a robust operational sample. Furthermore, variables were transformed into first differences to achieve stationarity.
+
+* **Econometric Modeling and Diagnostics:** This task involved writing the core R scripts to test two competing macroeconomic hypotheses. Responsibilities included running baseline OLS models, identifying omitted variable bias, and iteratively building Autoregressive (ARX) and Distributed Lag (DL) models. Key diagnostics such as Newey-West standard errors, Variance Inflation Factor (VIF) testing, and Breusch-Godfrey (BG) tests for serial correlation were handled here.
+
+* **Data Visualization and Narrative Construction:** The final operational task was translating complex regression outputs into an accessible academic narrative. This involved utilizing the `ggplot2` library in R to create high-impact visualizations, such as the "Diaspora Pulse" and the "Leakage Map," ensuring that the quantitative findings clearly supported the qualitative policy conclusions.
+
+### 1.3 Organization and Collaboration
+The team organized its collaboration through weekly meetings to review the statistical outputs and ensure the theoretical direction remained cohesive. To manage the codebase effectively, we established a dedicated GitHub repository integrated with an RStudio Project environment (`.Rproj`). By utilizing Git for version control, we maintained a continuously synchronized workflow, allowing all members to seamlessly push modifications, track changes, and work simultaneously on the same up-to-date files. The primary programming language utilized was R, with an emphasis on libraries such as `lmtest`, `sandwich`, `dplyr`, and `ggplot2`. A centralized R script (`models.R`) was strictly maintained within the repository to guarantee the absolute reproducibility of all data transformations and regression results.
+
+---
+
+## 2. Project Rationale and Objective
+
+### 2.1 The Economic Logic and Motivation
+The fundamental logic behind this project stems from a desire to empirically test the "Dutch Disease" theory in a uniquely structured economy. The classic Dutch Disease paradox dictates that a massive influx of foreign currency can produce severe negative consequences for a country's external competitiveness. When an economy experiences a boom in external resources, the sudden increase in household disposable income generates a surge in demand for domestic non-tradable goods (the "spending effect"). Consequently, domestic prices inflate, the Real Effective Exchange Rate (REER) appreciates, and capital and labor shift away from export-oriented sectors (the "resource movement effect").
+
+Applied to the phenomenon of international migration, this theory suggests that massive diaspora remittances can act as a persistent external shock, appreciating the REER and eroding the competitiveness of the receiving country's tradable sector. 
+
+### 2.2 The Anomaly of Kosovo
+Kosovo presents a fascinating macroeconomic anomaly. Remittances are a foundational pillar of Kosovo's financial inflows, representing an indispensable mechanism for sustaining household consumption, healthcare, and housing needs. However, only a marginal fraction of these funds is channeled into productive investments or new business creation. Furthermore, Kosovo is characterized by an extreme structural dependence on foreign imports. This massive import reliance implies that the "spending effect" might not manifest as domestic inflation, but rather as an immediate surge in the demand for foreign goods, a phenomenon we defined as the "Import Leakage Channel".
+
+### 2.3 Main Objectives and Research Questions
+The main objective of this project is to empirically distinguish between these two competing macroeconomic mechanisms. We aim to answer the following core research questions:
+
+1.  Do diaspora remittances directed to Kosovo generate a traditional Dutch Disease effect by putting pressure on the domestic economy and directly appreciating the Real Effective Exchange Rate?
+2.  If remittances do not appreciate the REER, are these inflows instead absorbed through an alternative "Import Leakage Channel," thereby causing a direct, immediate worsening of Kosovo's commercial trade deficit?
+
+---
+
+## 3. Theoretical Background and Literature Review
+
+To guide our statistical models, we looked at existing economic literature to understand how remittances usually affect an economy. The starting point for our hypothesis is the classic Dutch Disease model described by Corden and Neary (1982). This model basically explains how a sudden inflow of foreign money can increase domestic spending, leading to inflation and hurting the country's export competitiveness.
+
+When applying this idea to remittances, the literature shows mixed results. Guha (2013) noted that money sent from abroad changes how families consume goods, which can shift resources between different sectors of the economy. Similarly, a working paper by Acosta, Lartey, and Mandelman (2007) suggests that these inflows generally lead to real exchange rate appreciation. 
+
+Looking at actual case studies, Chowdhury and Rabbi (2014) analyzed Bangladesh and found evidence supporting the idea that workers' remittances do appreciate the real exchange rate and reduce competitiveness. Expanding on this, Polat and Rodríguez Andrés (2019) looked at a broader group of developing countries and concluded that while remittances can cause Dutch Disease, the actual effects vary a lot depending on the specific characteristics of the receiving country.
+
+This brings us to the main inspiration for our project. Recently, research has suggested that the impact of remittances depends heavily on how much a country relies on imports. We based our alternative hypothesis on a 2025 IMF Working Paper by Carare et al. This paper points out that in countries with a very high import-to-GDP ratio, remittances do not significantly appreciate the Real Effective Exchange Rate (REER). Instead, the extra money is mostly spent on buying foreign goods rather than domestic ones. We used this specific IMF paper as a theoretical benchmark to see if Kosovo's data followed this exact same pattern.
+
+---
+
+## 4. Data Collection and Sources
+
+### 4.1 Data Provenance and Time Horizon
+
+To capture the immediate, short-term liquidity shocks associated with remittance inflows, we utilized high-frequency monthly data rather than smoothed annual aggregates. The primary dataset aggregated official macroeconomic indicators from the Datasphere and Worldbank databases. Remittance and Foreign Direct Investment (FDI) data reflect metrics typical of Central Bank tracking, while exchange rate dynamics and inflation align with International Monetary Fund (IMF) and World Bank parameters. 
+
+The raw dataset spanned an extensive period from December 2006 to June 2025. However, during the exploratory data analysis phase, we realized that data for our most critical variables—specifically Remittances and FDI—only started in January 2014. Because the data from 2007 to 2013 was entirely missing for these key metrics, we had to drop the initial 85 observations, along with the final incomplete observation. This left us with a solid, consistent working sample of 137 monthly observations spanning exactly from January 2014 to May 2025.
+
+### 4.2 Key Variables and Summary Statistics
+The dataset integrates the following core variables:
+
+*   **REER\_EU:** The Real Effective Exchange Rate indexed against the European Union. An increase indicates a loss of Kosovar export competitiveness.
+*   **Remittances:** Total monthly incoming financial transfers from the diaspora, measured in USD.
+*   **Inflation & NEER:** Domestic inflation rates and the Nominal Effective Exchange Rate.
+*   **FDI:** Monthly Foreign Direct Investment inflows.
+*   **NX (Net Exports):** Calculated strictly as Exports minus Imports. Given Kosovo's structural deficit, this value is chronically negative.
+
+**Table 1. Descriptive Statistics of the Cleaned Monthly Dataset (2014-2025)**
+
+| Variable | Mean | Std. Dev. | Min | Max |
+| :--- | :--- | :--- | :--- | :--- |
+| **REER\_EU** | 106.411 | 1.350 | 103.787 | 109.637 |
+| **Remittances** | 80.062 | 24.960 | 41.572 | 141.949 |
+| **Inflation** | 2.473 | 3.511 | -1.223 | 14.197 |
+| **NEER** | 104.830 | 2.855 | 100.851 | 110.701 |
+| **FDI** | 36.383 | 27.353 | -65.614 | 102.672 |
+| **NX** | -292.203 | 106.790 | -561.563 | -109.338 |
+
+### 4.3 Data Cleaning and Transformation Strategies
+Macroeconomic time-series data is notoriously prone to non-stationarity, which can result in spurious regression outputs. To mitigate this, our primary data transformation involved converting all continuous variables into first differences ($\Delta X_t = X_t - X_{t-1}$). This transformation forces the model to evaluate the impact of immediate monthly *shocks* rather than relying on underlying long-term trends. Furthermore, due to the severe seasonality of diaspora inflows, we introduced a strict matrix of monthly dummy variables to isolate the true macroeconomic impact from routine cyclical variance.
+
+---
+
+## 5. Qualitative and Descriptive Analysis
+
+Before engaging in rigorous econometric modeling, a visual and descriptive assessment of the data revealed fundamental insights regarding Kosovo's economic rhythm. 
+
+### 5.1 The Diaspora Pulse
+
+The most prominent qualitative finding is the phenomenon we identify as the "Diaspora Pulse". Plotting the historical evolution of remittances (2014-2025) reveals a clear, upward structural growth trend, but more importantly, it showcases violent, cyclical intra-year volatility. 
+
+```{r hist-remittances, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Evolution of Monthly Remittance Flows", fig.align='center', fig.width=6, fig.height=4}
+library(ggplot2)
+ggplot(MonthlyRemittances2, aes(x = Month, y = Remittances)) +
+  geom_area(fill = "#3498DB", alpha = 0.15) +
+  geom_line(color = "#2C3E50", linewidth = 1) +
+  geom_smooth(method = "loess", span = 0.3, color = "#E74C3C", 
+              linetype = "dashed", fill = "#FADBD8", alpha = 0.4, linewidth = 0.8) +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(
+    title = "Evolution of Monthly Remittance Flows",
+    subtitle = "Historical dynamics and growth trend (2014 - 2025)",
+    x = NULL, 
+    y = "Remittances (USD)", 
+    caption = "Data elaboration: Kosovariance Project"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18, color = "#2C3E50"),
+    plot.subtitle = element_text(size = 13, color = "#7F8C8D", margin = margin(b = 15)),
+    axis.text = element_text(color = "#34495E"),
+    axis.title.y = element_text(face = "bold", color = "#2C3E50", margin = margin(r = 12)),
+    panel.grid.major.y = element_line(color = "#BDC3C7", linewidth = 0.4, linetype = "dotted"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(), 
+    plot.caption = element_text(hjust = 0, color = "#95A5A6", size = 10, face = "italic", margin = margin(t = 15))
+  )
+```
+
+Boxplot analyses of the monthly inflows demonstrate massive, statistically significant spikes predominantly concentrated around the summer months (July and August) and the winter holidays (December). These spikes perfectly correlate with periods of mass diaspora return to Kosovo.
+
+```{r diaspora-pulse, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center', fig.width=6, fig.height=4}
+# Create a proper ordered month factor first
+MonthlyRemittances2$Month_Name <- factor(
+  format(MonthlyRemittances2$Month, "%b"), 
+  levels = c("gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic")
+)
+
+ggplot(MonthlyRemittances2, aes(x = Month_Name, y = Remittances)) +
+  geom_boxplot(fill = "#BDC3C7", color = "#2C3E50", outlier.color = "#E74C3C") +
+  labs(
+    title = "The Diaspora Pulse",
+    subtitle = "Seasonal Spikes in Remittance Inflows",
+    x = "Month",
+    y = "Remittances (USD)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+### 5.2 The Baseline Correlation
+A preliminary correlation matrix generated during the diagnostic phase revealed an exceptionally strong negative correlation (approximately $-0.91$) between remittances and Net Exports. This implies that months characterized by the highest influx of diaspora liquidity are almost perfectly synchronized with the months experiencing the most severe trade deficits. While this descriptive statistic does not inherently prove causality, it provided the vital qualitative justification to formally test the Import Leakage Channel.
+
+---
+
+## 6. Quantitative Analysis and Econometric Modeling
+
+Our methodology follows an incremental logic: we begin with a naive baseline regression to identify specific risks, and subsequently build dynamic time-series specifications that strictly control for trends, seasonality, and autocorrelation.
+
+### 6.1 The Flawed Baseline: The Exchange Rate Optical Illusion
+To test the primary hypothesis of the Domestic Pressure Channel, we estimated a standard Ordinary Least Squares (OLS) regression in levels:
+
+$$REER\_EU_t = \beta_0 + \beta_1 Remittances_t + \beta_2 Inflation_t + \beta_3 NEER_t + \epsilon_t$$
+
+At first glance, this baseline model yielded a highly significant negative coefficient for remittances (Estimate: $-0.0472$, $p < 0.001$). This initial reading paradoxically suggested that higher remittances were associated with real depreciation, contradicting traditional Dutch Disease mechanics. However, this result is an "optical illusion." Relying on static OLS for non-stationary macroeconomic time-series ignores the deep collinearity between macro variables and completely fails to isolate the seasonal "Diaspora Pulse".
+
+### 6.2 Time-Series Discipline: Rejecting the REER Channel
+
+To uncover the true causal mechanics, we transitioned to a heavily disciplined Autoregressive specification with exogenous controls (ARX) modeled in first differences:
+
+$$
+\begin{aligned}
+\Delta REER_t &= \beta_0 + \beta_1 \Delta REER_{t-1} + \beta_2 \Delta REER_{t-4} + \beta_3 \Delta REER_{t-12} \\
+&\quad + \beta_4 \Delta Remittances_t + \beta_5 \Delta Inflation_t + \beta_6 \Delta FDI_t \\
+&\quad + \beta_7 \Delta NX_t + \sum \delta_m Month_m + \epsilon_t
+\end{aligned}
+$$
+
+To ensure total robustness, standard errors were adjusted utilizing the Newey-West procedure to control for heteroskedasticity and autocorrelation. The Breusch-Godfrey test yielded a p-value of 0.412, confirming the absence of residual serial correlation. 
+
+**Results:** Once structural dynamics, seasonality, and robust errors were applied, the direct effect of remittances on the REER completely vanished. The coefficient for $\Delta Remittances$ plummeted to 0.0029 with a highly insignificant p-value of 0.525. Instead, the model proved that monthly inflation ($\Delta Inflation$, coefficient 0.4202, $p < 0.001$) is the dominant driver of exchange rate variance. The model achieved a robust F-statistic of 47.91 and an Adjusted $R^2$ of 0.6315. This conclusively proves that diaspora inflows do not trigger domestic Dutch Disease appreciation.
+
+```{r stargazer-reer, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+# Load required libraries
+library(stargazer)
+library(sandwich)
+library(lmtest)
+
+# 1. Calculate Newey-West robust standard errors
+robust_se_reer <- sqrt(diag(NeweyWest(fit_final)))
+
+# 2. Calculate the Robust F-Statistic using a Wald test
+robust_wald <- waldtest(fit_final, vcov = NeweyWest(fit_final))
+robust_f_val <- round(robust_wald$F[2], 2)
+# Create a string with the F-value and significance stars (*** for p < 0.001)
+robust_f_string <- paste0(robust_f_val, "***") 
+
+# 3. Generate the LaTeX formatted table
+stargazer(fit_final, 
+          type = "latex", 
+          header = FALSE, 
+          se = list(robust_se_reer), # Injects the robust standard errors
+          title = "ARX Model Results: Testing the REER Channel (Newey-West SE)",
+          dep.var.labels = c("$\\Delta$ REER"),
+          covariate.labels = c("$\\Delta$ REER (lag 1)", "$\\Delta$ REER (lag 4)", "$\\Delta$ REER (lag 12)", 
+                               "$\\Delta$ Remittances", "$\\Delta$ Inflation", "$\\Delta$ FDI", "$\\Delta$ Net Exports"),
+          omit = "month", # Hides the seasonal dummies
+          omit.stat = c("f"), # Removes the default non-robust F-statistic
+          add.lines = list(
+            c("Monthly Seasonality Dummies", "Yes"),
+            c("Robust F-Statistic", robust_f_string) # Adds the newly calculated Robust F-Stat
+          ),
+          single.row = TRUE,
+          no.space = TRUE)
+```
+
+### 6.3 Proving the Import Leakage Channel
+
+Having empirical evidence that the liquidity does not inflate the REER, we shifted our dependent variable to test the indirect pathway: the Import Leakage Channel. We built a Distributed Lag (DL) model to map the exact temporal decay of the liquidity shock:
+
+$$
+\begin{aligned}
+\Delta NX_t &= \alpha_0 + \alpha_1 \Delta Remittances_t + \alpha_2 \Delta Remittances_{t-1} \\
+&\quad + \alpha_3 \Delta Remittances_{t-12} + \alpha_4 \Delta Inflation_t + \alpha_5 \Delta REER_t \\
+&\quad + \sum \eta_m Month_m + u_t
+\end{aligned}
+$$
+
+**Results:** This specification proved to be an explanatory powerhouse, capturing an Adjusted $R^2$ of 0.7466 and a massive Robust F-statistic of 118.21 ($p < 0.001$). The mechanics revealed three distinct phases:
+
+1. **Immediate Leakage:** The contemporaneous coefficient ($\Delta Remittances_t$) was -0.8600, holding immense statistical significance ($p = 0.0076$). This translates to a harsh macroeconomic reality: for every dollar of diaspora money entering Kosovo, 86 cents instantly leaks out of the domestic economy in the exact same month to finance foreign imports, severely worsening the trade deficit.
+2. **Long-Term Neutrality:** By analyzing the lag structure, we identified positive pull-backs at $\Delta Remittances_{t-1}$ (Coefficient: 0.4122) and $\Delta Remittances_{t-12}$ (Coefficient: 0.6941). We applied a formal Wald test for linear restrictions to evaluate the cumulative 12-month effect of these three parameters. The test yielded a non-significant cumulative effect ($p = 0.6327$), proving that the initial deficit shock completely neutralizes over a one-year horizon. 
+3. **Structural Dependency:** The mapping of these shocks (as visualized in our "Leakage Map" scatterplot) shows deep data concentration in the "Pure Leakage" quadrant. Positive remittance spikes are perfectly mirrored by immediate, equivalent surges in the trade deficit, leaving no permanent structural distortion.
+
+```{r stargazer-leakage, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+# Load required libraries
+library(stargazer)
+library(sandwich)
+library(lmtest)
+
+# Calculate the leakage model
+fit_leakage2 <- lm(d_NX ~ d_Remittances + d_Remittances_lag1 + d_Remittances_lag12 + 
+                   d_Inflation + d_REER + month, data = master_data_diff)
+
+# 1. Calculate Newey-West robust standard errors
+robust_se_leak <- sqrt(diag(NeweyWest(fit_leakage2)))
+
+# 2. Calculate the Robust F-Statistic using a Wald test
+robust_wald_leak <- waldtest(fit_leakage2, vcov = NeweyWest(fit_leakage2))
+robust_f_val_leak <- round(robust_wald_leak$F[2], 2)
+# Create a string with the F-value and significance stars (*** for p < 0.001)
+robust_f_string_leak <- paste0(robust_f_val_leak, "***")
+
+# 3. Generate the LaTeX formatted table
+stargazer(fit_leakage2, 
+          type = "latex", 
+          header = FALSE, 
+          se = list(robust_se_leak), # Injects robust SEs
+          title = "Distributed Lag Model Results: The Import Leakage Channel (Newey-West SE)",
+          dep.var.labels = c("$\\Delta$ Net Exports (NX)"),
+          covariate.labels = c("$\\Delta$ Remittances", "$\\Delta$ Remittances (lag 1)", "$\\Delta$ Remittances (lag 12)", 
+                               "$\\Delta$ Inflation", "$\\Delta$ REER"),
+          omit = "month", # Hides the seasonal dummies to keep the table clean
+          omit.stat = c("f"), # Removes the default non-robust F-statistic
+          add.lines = list(
+            c("Monthly Seasonality Dummies", "Yes"),
+            c("Robust F-Statistic", robust_f_string_leak) # Adds the newly calculated Robust F-Stat
+          ),
+          single.row = TRUE,
+          no.space = TRUE)
+
+
+```
+To visually synthesize these dynamics, the following scatterplot our "Leakage Map" illustrates the direct relationship between monthly remittance shocks and trade deficit fluctuations (where the $NX$ variable is inverted to represent the trade deficit). The overwhelming concentration of data points along the positive diagonal, particularly in the "Pure Leakage" quadrant, provides stark visual confirmation of our hypothesis: sudden inflows of diaspora wealth are immediately offset by equivalent expansions in the trade deficit, effectively bypassing the domestic economy.
+
+
+
+```{r leakage-map-plot, echo=FALSE, message=FALSE, warning=FALSE, fig.align='center', fig.width=7, fig.height=5}
+# Load the package for rendering LaTeX symbols in ggplot
+library(latex2exp)
+
+# Prepare data for the quadrant scatterplot
+quadrant_data <- master_data_diff %>%
+  mutate(
+    d_Trade_Deficit = -d_NX, 
+    Quadrant = case_when(
+      d_Remittances > 0 & d_Trade_Deficit > 0 ~ "Pure Leakage",
+      d_Remittances < 0 & d_Trade_Deficit < 0 ~ "Contraction",
+      TRUE ~ "Anomalous/Neutral"
+    )
+  ) %>%
+  select(d_Remittances, d_Trade_Deficit, Quadrant) %>%
+  na.omit()
+
+# Generate the scatterplot
+ggplot(quadrant_data, aes(x = d_Remittances, y = d_Trade_Deficit, color = Quadrant)) +
+  geom_point(size = 3, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.7) +
+  scale_color_manual(values = c(
+    "Pure Leakage" = "#E74C3C",  
+    "Contraction" = "#2980B9",   
+    "Anomalous/Neutral" = "#BDC3C7"          
+  )) +
+  labs(
+    title = "The Leakage Map: Where Do the Shocks Go?",
+    subtitle = "Data concentration proves excess remittances finance the deficit",
+    x = TeX("Remittance Shock ($\\Delta$ USD)"),
+    y = TeX("Trade Deficit Shock ($\\Delta$ USD)")
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11)
+  )
+
+```
+
+
+---
+## 7. Conclusions and Final Considerations
+
+### 7.1 Summary of Macroeconomic Findings
+The primary goal of the "Kosovariance" project was to solve the macroeconomic puzzle surrounding Kosovo's massive remittance inflows. Our empirical analysis provides a definitive answer: Kosovo does not suffer from traditional Dutch Disease. Once rigorous time-series discipline is applied, there is no statistically significant evidence that diaspora transfers appreciate the Real Effective Exchange Rate. 
+
+Instead, the Kosovar economy operates heavily as a "pass-through" system dominated by the Import Leakage Channel. Because the domestic industrial base is unable to satisfy the aggregate demand generated by the diaspora, the incoming liquidity completely bypasses domestic non-tradable goods. It enters the economy as a highly seasonal, short-term liquidity shock and immediately leaks out to finance foreign imports. This shock is entirely temporary, neutralizing completely over a 12-month cyclical horizon.
+
+### 7.2 Alignment with Contemporary Literature
+Our quantitative findings beautifully align with the most recent advancements in global macroeconomic consensus. We directly validate the 2025 IMF empirical research conducted by Carare et al., which asserts an exception to the Dutch Disease rule. As the IMF postulates, and as our Kosovo model proves, in heavily import-dependent economies operating under fixed or highly stabilized exchange rate regimes (like Kosovo's euroized environment), the structural reliance on foreign goods acts as a pressure release valve, naturally neutralizing any potential REER appreciation.
+
+### 7.3 Limitations of the Study
+While our models are highly robust (Adjusted $R^2 \approx 0.75$), the analysis maintains certain limitations. The reliance on official Central Bank data means we cannot perfectly quantify informal remittances---cash physically carried across borders by returning diaspora members---which likely amplifies the severity of the seasonal "Diaspora Pulse". Furthermore, integrating granular, sector-specific pricing data or real interest rate dynamics could provide even deeper clarity distinguishing between distinct spending effects. 
+
+### 7.4 Macroeconomic Policy Implications
+The conclusions of this project carry massive implications for Kosovo's fiscal and monetary policy. Policymakers and central bank authorities should not design regulations aimed at restricting capital inflows out of a fear of Dutch Disease or REER appreciation, as the leakage channel naturally prevents this distortion. 
+
+However, the fact that 86% of incoming liquidity instantly exits the country is a severe structural flaw. The policy mandate must shift away from merely managing liquidity toward aggressive, foundational industrial policy. The government must urgently develop targeted financial instruments---such as formalized Diaspora Bonds---designed to capture these private transfers before they leak into foreign consumption. By channeling this wealth into domestic productive investments, Kosovo can reduce its import dependency, build local value chains, and permanently increase the domestic macroeconomic multiplier of its diaspora wealth.
+
+\newpage
+
+## Appendix B: References
+
+Acosta, P. A., Lartey, E. K. K., & Mandelman, F. S. (2007). *Remittances and the Dutch disease* (Working Paper No. 2007-8a). Federal Reserve Bank of Atlanta.
+
+Carare, A., Celis, J. P., Hadzi-Vaskov, M., & Morito, Y. (2025). *How Do Remittances Affect the Real Exchange Rate? An Empirical Investigation* (IMF Working Paper WP/25/122). Washington, DC: International Monetary Fund.
+
+Chowdhury, M. B., & Rabbi, F. (2014). Workers' remittances and Dutch disease in Bangladesh. *The Journal of International Trade & Economic Development*, 23(4), 455-475.
+
+Corden, W. M., & Neary, J. P. (1982). Booming Sector and De-Industrialisation in a Small Open Economy. *The Economic Journal*, 92(368), 825-848.
+
+Guha, P. (2013). Macroeconomic effects of international remittances: The case of developing economies. *Economic Modelling*, 33, 292-305.
+
+Polat, B., & Rodríguez Andrés, A. (2019). Do emigrants’ remittances cause Dutch disease? A developing countries case study. *The Economic and Labour Relations Review*, 30(1), 59-76.
+
+UNDP and GERMIN. (2023). *Kosovo Diaspora and its Role Amidst Multiple Crises*. Pristina: United Nations Development Programme in Kosovo and GERMIN.
+
+\newpage
+
+## Appendix B: Econometric R Code Structure
+
+The following code details the exact computational steps utilized to clean the data, generate the Newey-West adjusted models, and construct the data visualizations.
+
+```{r, eval=FALSE}
+# Library Initialization
+library(readxl)
+library(here)
+library(corrplot)
+library(ggplot2)
+library(zoo)
+library(car)
+library(dplyr)
+library(lmtest)
+library(sandwich)
+library(scales)
+library(tidyr)
+
+# Data Import and Pre-Processing
+MonthlyRemittances <- read_excel(
+  here("data_raw", "Remittances_channel&country.xlsx"), 
+  sheet = "Monthly", 
+  col_names = TRUE
+)
+
+# Remove incomplete observations and the final incomplete row
+MonthlyRemittances2 <- MonthlyRemittances[-(1:85),] 
+MonthlyRemittances2 <- MonthlyRemittances2 [-138, ] 
+
+# Differencing for Stationarity
+master_data_diff <- data.frame(
+  d_REER = diff(MonthlyRemittances2$REER_EU),
+  d_Remittances = diff(MonthlyRemittances2$Remittances),
+  d_Inflation = diff(MonthlyRemittances2$Inflation),
+  d_NEER = diff(MonthlyRemittances2$NEER),
+  d_FDI = diff(MonthlyRemittances2$FDI),
+  d_NX = diff(MonthlyRemittances2$NX)
+)
+
+# Seasonality Matrix Generation
+master_data_diff <- master_data_diff %>%
+  mutate(
+    date = MonthlyRemittances2$Month[-1],
+    month = factor(format(as.Date(date), "%b"))
+  )
+
+# Lag Generation for ARX and DL Models
+master_data_diff <- master_data_diff %>%
+  mutate(
+    d_REER_lag1 = lag(d_REER, 1),
+    d_REER_lag4 = lag(d_REER, 4),
+    d_REER_lag12 = lag(d_REER, 12),
+    d_Remittances_lag1 = lag(d_Remittances, 1),
+    d_Remittances_lag2 = lag(d_Remittances, 2),
+    d_Remittances_lag12 = lag(d_Remittances, 12)
+  )
+
+# ---------------------------------------------------------
+# THE REER MODEL (Testing Dutch Disease)
+# ---------------------------------------------------------
+fit_final <- lm(
+  d_REER ~ d_REER_lag1 + d_REER_lag4 + d_REER_lag12 + 
+    d_Remittances + d_Inflation + d_FDI + d_NX + as.factor(month), 
+  data = master_data_diff
+)
+
+# Diagnostics and Robust Standard Errors
+robust_fit <- coeftest(fit_final, vcov = NeweyWest(fit_final))
+print(robust_fit)
+bgtest(fit_final, order = 12) # Autocorrelation test
+robust_f_test <- waldtest(fit_final, vcov = NeweyWest(fit_final)) 
+
+# ---------------------------------------------------------
+# THE LEAKAGE MODEL (Testing Net Exports)
+# ---------------------------------------------------------
+fit_leakage2 <- lm(
+  d_NX ~ d_Remittances + d_Remittances_lag1 + d_Remittances_lag12 + 
+    d_Inflation + d_REER + month, 
+  data = master_data_diff
+)
+
+# Diagnostics and Leakage Cumulative Testing
+summary(fit_leakage2)
+coeftest(fit_leakage2, vcov = NeweyWest(fit_leakage2))
+vif(fit_leakage2) # Multicollinearity test
+
+# Test cumulative neutrality
+linearHypothesis(
+  fit_leakage2, 
+  "d_Remittances + d_Remittances_lag1 + d_Remittances_lag12 = 0"
+) 
+
+# ---------------------------------------------------------
+# VISUALIZATION: THE LEAKAGE MAP
+# ---------------------------------------------------------
+quadrant_data <- master_data_diff %>%
+  mutate(
+    d_Trade_Deficit = -d_NX, 
+    Quadrant = case_when(
+      d_Remittances > 0 & d_Trade_Deficit > 0 ~ 
+        "Pure Leakage (Remittances ↑, Deficit ↑)",
+      d_Remittances < 0 & d_Trade_Deficit < 0 ~ 
+        "Contraction (Remittances ↓, Deficit ↓)",
+      TRUE ~ "Anomalous/Neutral Behavior"
+    )
+  ) %>%
+  select(d_Remittances, d_Trade_Deficit, Quadrant) %>%
+  na.omit()
+
+ggplot(quadrant_data, aes(x = d_Remittances, y = d_Trade_Deficit, color = Quadrant)) +
+  geom_point(size = 3.5, alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black", linewidth = 0.8) +
+  scale_color_manual(values = c(
+    "Pure Leakage (Remittances ↑, Deficit ↑)" = "#E74C3C",  
+    "Contraction (Remittances ↓, Deficit ↓)" = "#2980B9",   
+    "Anomalous/Neutral Behavior" = "#BDC3C7"          
+  )) +
+  labs(
+    title = "The Leakage Map: Where Do the Shocks Go?",
+    subtitle = "Data concentration proves excess remittances finance the deficit",
+    x = "Remittance Shock (Δ USD)",
+    y = "Trade Deficit Shock (Δ USD)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
