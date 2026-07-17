@@ -2,7 +2,7 @@
 
 **Project:** Do Diaspora Remittances Appreciate Kosovo's Real Effective Exchange Rate?  
 **Author (advanced extension):** Valerio Di Federico  
-**Baseline collaboration:** Valerio Di Federico, Emanuele Pedroni, Andrea Tibiletti  
+**Baseline collaboration:** University group project  
 **Dataset:** 137 monthly observations, January 2014 – May 2025  
 **Software:** R 4.5.2
 

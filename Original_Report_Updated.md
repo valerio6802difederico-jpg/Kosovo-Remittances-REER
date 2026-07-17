@@ -7,8 +7,7 @@
 > ### ⚠️ Academic Authorship Disclaimer
 >
 > **The original foundation, data mining pipeline, and baseline OLS settings for this study
-> were developed collaboratively with my university colleagues Emanuele Pedroni and Andrea
-> Tibiletti for a university Data Mining and Computational Statistics course project.**
+> were developed collaboratively with university colleagues as part of a university Data Mining and Computational Statistics course project.**
 >
 > **The advanced time-series econometric upgrades — including the Augmented Dickey-Fuller
 > (ADF) unit root testing, Breusch-Pagan and White heteroskedasticity diagnostics, the ARDL
@@ -21,7 +20,7 @@
 
 ---
 
-**Authors (original university project):** Valerio Di Federico, Emanuele Pedroni, Andrea Tibiletti  
+**Authors (original university project):** Valerio Di Federico and university co-authors  
 **Advanced extension (solo):** Valerio Di Federico  
 **Course:** Data Mining and Computational Statistics  
 **Dataset:** 137 monthly observations, January 2014 – May 2025
@@ -32,10 +31,9 @@
 
 ### 1.1 Group Formation
 
-The "Kosovariance" group project team consists of Valerio Di Federico, Emanuele Pedroni,
-and Andrea Tibiletti. The group was formed based on a shared academic interest in
-international macroeconomics and econometric analysis, as well as the complementary skills
-each member brings to the project.
+The "Kosovariance" group project team was formed based on a shared academic interest in
+international macroeconomics and econometric analysis, combining complementary skills across
+the group.
 
 ### 1.2 Task Assignment and Responsibilities
 

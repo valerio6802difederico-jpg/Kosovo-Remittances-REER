@@ -16,7 +16,7 @@ Kosovo is one of the world's most remittance-dependent economies, with diaspora 
 
 > **Attribution Notice**
 >
-> The original data pipeline, OLS baseline models, and visualisations were developed collaboratively with university colleagues **Emanuele Pedroni** and **Andrea Tibiletti** as part of a university course project. The advanced time-series econometric layer — comprising ADF unit root testing, Breusch-Pagan and White heteroskedasticity diagnostics, ARDL bounds testing, and UECM long-run coefficient estimation — was designed and implemented subsequently by **Valerio Di Federico** as an independent solo extension of the joint baseline work.
+> The original data pipeline, OLS baseline models, and visualisations were developed collaboratively with university colleagues as part of a university course project. The advanced time-series econometric layer — comprising ADF unit root testing, Breusch-Pagan and White heteroskedasticity diagnostics, ARDL bounds testing, and UECM long-run coefficient estimation — was designed and implemented subsequently by **Valerio Di Federico** as an independent solo extension of the joint baseline work.
 
 ---
 
@@ -174,4 +174,4 @@ This project is licensed under the **MIT License**. You are free to use, modify,
 
 ---
 
-*Kosovariance — Valerio Di Federico, Emanuele Pedroni, Andrea Tibiletti (university baseline); advanced extension by Valerio Di Federico.*
+*Kosovariance — Valerio Di Federico (university baseline with co-authors); advanced extension by Valerio Di Federico.*

@@ -3,7 +3,7 @@
 # =============================================================================
 # Script Name  : KOSOVARIANCE_Advanced_Econometrics.R
 # Authors      : Valerio Di Federico (solo advanced extension)
-#                Original baseline: Di Federico, Pedroni, Tibiletti
+#                Original baseline: university group project
 # Description  : Advanced econometric analysis of Kosovo remittances and REER.
 #                Sections: ADF stationarity, heteroskedasticity tests,
 #                ARDL bounds test + UECM long-run coefficients,
@@ -30,7 +30,7 @@ suppressPackageStartupMessages({
 cat("======================================================================\n")
 cat("  KOSOVARIANCE — Advanced Econometrics\n")
 cat("  Author: Valerio Di Federico\n")
-cat("  Baseline: Di Federico, Pedroni, Tibiletti\n")
+cat("  Baseline: University group project\n")
 cat("======================================================================\n\n")
 
 cat(">>> SECTION 0: Libraries & Data Loading\n")
