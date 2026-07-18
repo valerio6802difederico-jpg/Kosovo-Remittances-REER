@@ -6,98 +6,99 @@
 
 ---
 
-## 📄 Abstract
+## Abstract
 
-Kosovo is one of the world's most remittance-dependent economies, with diaspora transfers consistently exceeding 15% of GDP. This project empirically examines whether these massive inflows trigger a **Dutch Disease** effect — appreciating the Real Effective Exchange Rate (REER) and eroding export competitiveness — or whether they are instead absorbed through an **Import Leakage Channel** that widens the trade deficit without causing REER appreciation. Using 137 monthly observations (January 2014 – May 2025), the analysis progresses through a rigorous econometric pipeline: from first-difference ARX models with Newey-West robust standard errors, through ARDL bounds-testing (Pesaran, Shin & Smith, 2001), to Local Projections IV (Jordà, 2005) correcting for potential endogeneity and Eurozone omission. All three methodological layers converge on the same conclusion: remittances carry **no statistically significant effect on the REER** at any horizon. Instead, an estimated **86 cents of every diaspora dollar leak directly into imports** within the same month, with full neutralisation occurring within 12 months.
+Kosovo is among the most remittance-dependent economies in Europe, with diaspora transfers consistently representing more than 15 per cent of GDP. This study examines empirically whether these inflows generate a Dutch Disease effect — a statistically significant appreciation of the Real Effective Exchange Rate (REER) — or whether they are absorbed through an import-demand channel that widens the trade deficit without appreciating the REER. Using 137 monthly observations spanning January 2014 to May 2025, the analysis proceeds through a sequential econometric pipeline: a first-difference Autoregressive model with eXogenous controls (ARX) and Newey-West HAC standard errors establishes the short-run picture; ARDL bounds testing (Pesaran, Shin & Smith, 2001) establishes the long-run cointegrating relationship; and a Local Projections IV framework (Jordà, 2005) addresses potential endogeneity and the omission of Eurozone macroeconomic conditions. Across all three specifications, the coefficient on remittances in the REER equation is statistically indistinguishable from zero. A contemporaneous import propensity of approximately 0.86 per unit of remittance inflow is estimated from a Distributed Lag model, with full neutralisation of the trade-balance effect within twelve months.
+
+> **Author's Note:** The baseline data pipeline, initial OLS specifications, descriptive analysis, ARX modelling, and Distributed Lag leakage estimation were developed as part of a collaborative university course project. The formal econometric extension — comprising ADF unit root testing, Breusch-Pagan and White heteroskedasticity diagnostics, ARDL bounds testing, UECM long-run coefficient estimation, and Local Projections IV — constitutes the independent analytical contribution of the primary author. Collaborating colleagues are not individually named in this public release.
 
 ---
 
-## 🌍 Economic Background
+## Economic Background
 
 ### Dutch Disease Theory
 
-The *Dutch Disease* hypothesis (Corden & Neary, 1982) posits that large foreign currency inflows generate real exchange rate appreciation through two channels:
+The Dutch Disease hypothesis (Corden & Neary, 1982) posits that a sustained increase in foreign currency inflows generates real exchange rate appreciation through two transmission channels:
 
-1. **Spending Effect**: Increased domestic demand for non-tradeable goods raises their relative prices, appreciating the real exchange rate.
-2. **Resource Movement Effect**: Labour shifts toward the booming sector, raising wages and production costs economy-wide.
+1. **The Spending Effect:** Increased domestic demand for non-tradeable goods raises their relative price, appreciating the real exchange rate.
+2. **The Resource Movement Effect:** Labour reallocates toward the expanding sector, increasing wages and production costs economy-wide.
 
-A persistent REER appreciation undermines the competitiveness of domestic exporters and import-competing industries, potentially de-industrialising the economy.
+Persistent REER appreciation reduces the price competitiveness of domestic exporters and import-competing industries.
 
-### The Kosovo Anomaly
+### The Kosovo Case
 
-Kosovo presents a compelling natural experiment. Despite receiving some of the highest per-capita remittances globally, it maintains a **fully euroised economy** with no independent monetary policy, limiting the standard spending-effect transmission mechanism. The economy is also characterised by structural import dependence — a chronically negative trade balance — raising the question of whether incoming diaspora liquidity simply exits immediately through foreign purchases rather than creating any domestic inflationary pressure.
-
----
-
-## ❓ Research Questions
-
-1. Do remittance inflows cause a statistically significant appreciation of Kosovo's Real Effective Exchange Rate — in both the short run and the long run?
-2. Is there a confirmed cointegrating relationship between the REER and its macroeconomic fundamentals over the 2014–2025 period?
-3. Which variable is the dominant long-run structural driver of Kosovo's REER?
-4. Does an Import Leakage Channel exist? What fraction of each diaspora dollar is absorbed by imports, and over what time horizon does the effect neutralise?
-5. Are these findings robust to potential endogeneity between remittances and the REER, and to the omission of Eurozone macroeconomic conditions?
+Kosovo provides a relevant empirical setting for testing this hypothesis. The economy operates under full euroisation, with no independent monetary policy instrument and no exchange rate adjustment mechanism. It is simultaneously characterised by structural import dependence, reflected in a chronically negative trade balance. These structural features suggest that remittance-induced demand shocks may be absorbed primarily through additional import expenditure rather than through domestic price adjustment — a hypothesis that motivates the empirical design of this study.
 
 ---
 
-## 📊 Data Sources
+## Research Questions
+
+1. Do remittance inflows cause a statistically significant appreciation of Kosovo's Real Effective Exchange Rate in the short run and in the long run?
+2. Is there a statistically confirmed cointegrating relationship between the REER and its macroeconomic determinants over the 2014–2025 sample period?
+3. Which variable constitutes the dominant structural long-run driver of Kosovo's REER?
+4. Is there a statistically significant contemporaneous pass-through from remittance inflows to import demand, and over what horizon does the effect dissipate?
+5. Are the main findings robust to potential endogeneity between remittances and the REER, and to the omission of Eurozone macroeconomic conditions?
+
+---
+
+## Data Sources
 
 | Source | Variable(s) | Frequency | Period |
 |---|---|---|---|
-| Kosovo Central Bank (BQK) | Remittances (USD m), FDI (USD m), Balance of Payments | Monthly | Jan 2014 – May 2025 |
+| Kosovo Central Bank (BQK) | Remittances (USD m), FDI (USD m), Balance of Payments components | Monthly | Jan 2014 – May 2025 |
 | IMF / World Bank | Real Effective Exchange Rate (REER), Nominal Effective Exchange Rate (NEER) | Monthly | Jan 2014 – May 2025 |
 | Kosovo Tax Administration (ATK) | Consumer Price Index / Inflation | Monthly | Jan 2014 – May 2025 |
-| Eurostat / FRED | EA Unemployment Rate, EA HICP, EUR/USD Rate | Monthly | Jan 2014 – May 2025 |
+| Eurostat / FRED | EA Unemployment Rate, EA HICP, EUR/USD exchange rate | Monthly | Jan 2014 – May 2025 |
 
-- **Total observations:** 137 monthly observations after cleaning (initial 85 pre-2014 obs and one anomalous row removed)
-- **Raw data format:** Excel (`.xlsx`), stored in `data_raw/`
-
----
-
-## 🔬 Methodology
-
-The analysis follows a sequential, diagnostic-driven econometric pipeline. Each modelling choice is justified by the results of the preceding step — no specification is imposed a priori.
-
-1. **OLS Baseline** — Estimate a naive level regression of REER on its candidate drivers. Identify the "Exchange Rate Optical Illusion": a spurious negative coefficient on remittances caused by non-stationarity and omitted seasonality.
-
-2. **First-Difference ARX Specification** — Transition to an Autoregressive model with eXogenous controls in first differences (Δ), adding lags of REER (t−1, t−4, t−12) and a full matrix of monthly seasonal dummies to isolate the true macroeconomic signal from the "Diaspora Pulse" seasonal pattern.
-
-3. **Newey-West HAC Standard Errors** — Apply heteroskedasticity- and autocorrelation-consistent (HAC) standard errors throughout, confirmed as appropriate by a Breusch-Godfrey serial correlation test (p = 0.412) and VIF multicollinearity diagnostics.
-
-4. **Distributed Lag Leakage Model** — Shift the dependent variable to Net Exports (ΔNX) to test the Import Leakage Channel directly. Estimate a DL model with contemporaneous and lagged remittances; apply a Wald test for the cumulative 12-month effect.
-
-5. **ADF Unit Root Testing** (`urca`, `tseries`) — Formally classify each variable by integration order using the Augmented Dickey-Fuller test with AIC lag selection. *Result: mixed I(0)/I(1) dataset.*
-
-6. **Heteroskedasticity Diagnostics** — Apply Breusch-Pagan and White tests to the ARX residuals. *Result: no heteroskedasticity detected at 5%.*
-
-7. **ARDL Bounds Test** (Pesaran, Shin & Smith, 2001) — Test for a long-run level relationship in the mixed I(0)/I(1) setting, which rules out the Johansen procedure. *Result: F = 5.20 > upper I(1) bound of 3.79 at 5% → cointegration confirmed.*
-
-8. **UECM Long-Run Coefficients** — Extract structural long-run multipliers and the speed-of-adjustment parameter from the Unrestricted Error Correction Model.
-
-9. **Local Projections IV** (Jordà, 2005; Stock & Watson, 2018) — Address potential endogeneity and Eurozone omission. Construct an exogenous remittance shock (purged of Eurozone push-factors via OLS residual), then run horizon-by-horizon projections (h = 0…12 months) with Newey-West HAC SEs and 1,000-replication pairs bootstrap to correct generated-regressor bias.
+**Total observations:** 137 monthly observations after cleaning. The initial 85 pre-2014 observations were excluded due to complete absence of key series; one anomalous terminal observation was also removed.
 
 ---
 
-## 📈 Key Findings
+## Methodology
 
-1. **"Exchange Rate Optical Illusion" identified:** Naive OLS in levels produces a spurious significant negative coefficient on remittances — an artefact of non-stationarity and omitted seasonality, not a structural relationship.
+The analysis follows a sequential, diagnostic-driven pipeline in which each modelling choice is determined by the results of the preceding step.
 
-2. **Dutch Disease rejected in the short run:** After first-differencing, seasonal controls, and Newey-West HAC robust errors, the coefficient on ΔRemittances becomes 0.0029 (p = 0.525) — statistically indistinguishable from zero.
+1. **Static OLS in levels** — Provides a reference specification and identifies sources of estimation bias arising from non-stationarity and omitted seasonality.
 
-3. **Import Leakage Channel confirmed:** An estimated **86 cents of every diaspora dollar** flow directly into imports within the same month (DL coefficient: −0.860, p = 0.008). The effect fully neutralises within 12 months (cumulative Wald test p = 0.633).
+2. **First-difference ARX specification** — Models ΔREER as a function of own lags (t−1, t−4, t−12), contemporaneous changes in exogenous regressors, and a full matrix of monthly seasonal dummy variables to control for intra-year cyclicality in remittance flows.
 
-4. **Mixed integration order:** REER, Inflation, NEER, and NX are I(1); Remittances and FDI are I(0) — precluding Johansen cointegration and mandating the ARDL bounds approach.
+3. **Newey-West HAC standard errors and serial correlation diagnostics** — HAC-robust standard errors (Newey & West, 1987) are applied throughout. A Breusch-Godfrey test (p = 0.412) confirms the absence of residual serial correlation. Variance Inflation Factor diagnostics confirm no harmful collinearity.
 
-5. **Cointegration confirmed:** ARDL Bounds Test F-statistic = **5.20**, exceeding the upper I(1) critical bound of **3.79** at the 5% level, confirming a long-run equilibrium relationship exists among the variables.
+4. **Distributed Lag model for import demand** — A DL specification with Net Exports as the dependent variable estimates the contemporaneous and lagged pass-through of remittance inflows to the trade balance. A Wald test evaluates the cumulative twelve-month effect.
 
-6. **Dutch Disease rejected in the long run:** Long-run ARDL multiplier for Remittances: **β = +0.012, p = 0.268** — statistically zero even in the long-run equilibrium.
+5. **ADF unit root testing** (`urca`, `tseries`) — Classifies each variable by integration order using the Augmented Dickey-Fuller test with AIC lag selection. *Result: mixed I(0)/I(1) dataset.*
 
-7. **NEER is the dominant REER driver:** Long-run coefficient on NEER: **β = 0.634, p < 0.001** — nominal exchange rate pass-through, not diaspora inflows, anchors Kosovo's real exchange rate.
+6. **Heteroskedasticity diagnostics** — Breusch-Pagan and White tests applied to ARX residuals. *Result: homoskedasticity not rejected at the 5% level.*
 
-8. **LP-IV confirms robustness:** After correcting for potential endogeneity (Wu-Hausman p = 0.304 — endogeneity not detected) and Eurozone omission, **0 out of 13 horizons** show a significant REER response. The leakage channel is confirmed at h = 0 (β = −0.59, significant). Dutch Disease is **triply rejected** across all methodological layers.
+7. **ARDL bounds test** (Pesaran, Shin & Smith, 2001) — Tests for a long-run level relationship in the mixed I(0)/I(1) setting, which precludes the Johansen procedure. *Result: F = 5.20 exceeds the upper I(1) critical bound of 3.79 at the 5% level.*
+
+8. **UECM long-run coefficients** — Extracts structural long-run multipliers and the speed-of-adjustment parameter from the Unrestricted Error Correction Model.
+
+9. **Local Projections IV** (Jordà, 2005; Stock & Watson, 2018) — Constructs an exogenous remittance shock by removing the Eurozone push-factor component via OLS residualisation, then estimates horizon-specific projections (h = 0,...,12) with Newey-West HAC standard errors and a 1,000-replication pairs bootstrap to correct for generated-regressor bias.
 
 ---
 
-## 🗂️ Repository Structure
+## Key Findings
+
+1. **Level-regression specification bias identified:** The static OLS estimator in levels yields a spurious negative coefficient on remittances, attributable to non-stationarity and omitted seasonality. First-differencing with seasonal controls eliminates this bias entirely.
+
+2. **No short-run REER effect of remittances:** In the ARX specification, the coefficient on ΔRemittances is 0.0029 (p = 0.525), not statistically different from zero. Domestic inflation is the dominant short-run REER driver (coefficient 0.4202, p < 0.001).
+
+3. **Contemporaneous import pass-through confirmed:** A contemporaneous coefficient of −0.860 (p = 0.008) in the Distributed Lag model indicates that approximately 86 per cent of a unit remittance inflow is absorbed by import demand within the same month. The cumulative twelve-month effect is statistically indistinguishable from zero (Wald test p = 0.633).
+
+4. **Mixed integration order:** REER, Inflation, NEER, and NX are I(1); Remittances and FDI are I(0). This precludes Johansen cointegration and supports the ARDL bounds approach.
+
+5. **Long-run cointegration confirmed:** The ARDL Bounds Test F-statistic (5.20) exceeds the upper I(1) critical bound (3.79) at the 5% significance level, establishing a statistically significant long-run equilibrium relationship.
+
+6. **No long-run REER effect of remittances:** The UECM long-run multiplier for Remittances is β = +0.012 (p = 0.268), not statistically significant. The Dutch Disease hypothesis is not supported in the long-run equilibrium.
+
+7. **NEER is the dominant long-run REER driver:** The NEER long-run multiplier is β = 0.634 (p < 0.001), reflecting nominal exchange rate pass-through from the euroised monetary regime.
+
+8. **Robustness across specifications:** The LP-IV framework yields a statistically insignificant REER response at all 13 estimated horizons (joint bootstrap p-value = 0.831). The Wu-Hausman test fails to reject exogeneity (p = 0.304), confirming that the ARX and ARDL estimates are not subject to endogeneity bias. The contemporaneous import pass-through is confirmed (β = −0.59 at h = 0). Results are consistent across all three methodological layers.
+
+---
+
+## Repository Structure
 
 ```
 Kosovo-Remittances-REER/
@@ -105,24 +106,23 @@ Kosovo-Remittances-REER/
 ├── report/
 │   ├── Report.Rmd                             # Full academic R Markdown report
 │   └── Report.pdf                             # Compiled PDF report
-├── KOSOVARIANCE_Rscript.R                     # OLS baseline and ARX/DL analysis
+├── KOSOVARIANCE_Rscript.R                     # Baseline OLS and ARX/DL analysis
 ├── KOSOVARIANCE_Advanced_Econometrics.R       # ADF, heteroskedasticity, ARDL, UECM
 ├── KOSOVARIANCE_LP_IV.R                       # Local Projections IV with bootstrap
-├── KOSOVARIANCE_LP_IV_IRF.png                 # Two-panel impulse response plot
+├── KOSOVARIANCE_LP_IV_IRF.png                 # Impulse response function plots
 ├── Methodology_and_Findings.md                # Detailed methods and results summary
-├── Original_Report_Updated.md                 # Full academic report (extended version)
+├── Original_Report_Updated.md                 # Extended academic report
 └── README.md
 ```
 
 ---
 
-## ▶️ How to Reproduce
+## Reproduction Instructions
 
 ### Prerequisites
 
-- **R** ≥ 4.5.2 ([download](https://cran.r-project.org/))
-- **RStudio** (recommended)
-- Install packages (run once):
+- **R** ≥ 4.5.2 ([CRAN](https://cran.r-project.org/))
+- Required packages:
 
 ```r
 install.packages(c(
@@ -141,38 +141,38 @@ git clone https://github.com/valerio6802difederico-jpg/Kosovo-Remittances-REER.g
 cd Kosovo-Remittances-REER
 ```
 
-**2. Run the baseline ARX and leakage channel analysis**
+**2. Baseline OLS and ARX/DL analysis**
 ```r
 source("KOSOVARIANCE_Rscript.R")
 ```
-Loads and cleans raw Excel data, estimates the OLS baseline, identifies the optical illusion, runs the first-difference ARX model with Newey-West SEs and Breusch-Godfrey diagnostics, and estimates the Distributed Lag leakage model with Wald test.
+Loads and cleans raw data, estimates the static OLS baseline, the first-difference ARX model with Newey-West standard errors and Breusch-Godfrey diagnostics, and the Distributed Lag import pass-through model with Wald test.
 
-**3. Run the formal unit root and long-run cointegration analysis**
+**3. Unit root testing, heteroskedasticity diagnostics, ARDL bounds test, UECM**
 ```r
 source("KOSOVARIANCE_Advanced_Econometrics.R")
 ```
-Performs ADF unit root tests, Breusch-Pagan and White heteroskedasticity diagnostics, ARDL bounds testing, and UECM long-run coefficient estimation. All results printed to console in formatted tables.
+Performs ADF tests, Breusch-Pagan and White diagnostics, ARDL bounds testing, and UECM long-run coefficient estimation. Results are printed to the console in formatted tables.
 
-**4. Run the LP-IV endogeneity and robustness analysis**
+**4. Local Projections IV**
 ```r
 source("KOSOVARIANCE_LP_IV.R")
 ```
-Fetches Eurozone variables (requires internet; falls back to AR-residual mode offline), constructs the exogenous remittance shock, runs Local Projections at h = 0…12, applies 1,000-rep pairs bootstrap, and saves `KOSOVARIANCE_LP_IV_IRF.png`.
+Requires internet access to retrieve Eurozone variables via Eurostat and FRED APIs; a fallback AR-residual mode operates offline. Runs horizon-specific projections with 1,000-replication pairs bootstrap and saves `KOSOVARIANCE_LP_IV_IRF.png`.
 
 **5. Compile the academic report (optional)**
 ```r
 rmarkdown::render("report/Report.Rmd", output_format = "pdf_document")
 ```
-> A pre-compiled `report/Report.pdf` is included. Raw data files in `data_raw/` are required for scripts to run.
+A pre-compiled `report/Report.pdf` is included. Raw data files in `data_raw/` are required for all scripts.
 
 ---
 
-## 📚 References
+## References
 
 1. Corden, W. M., & Neary, J. P. (1982). Booming sector and de-industrialisation in a small open economy. *The Economic Journal*, 92(368), 825–848.
 2. Pesaran, M. H., Shin, Y., & Smith, R. J. (2001). Bounds testing approaches to the analysis of level relationships. *Journal of Applied Econometrics*, 16(3), 289–326.
 3. Jordà, Ò. (2005). Estimation and inference of impulse responses by local projections. *American Economic Review*, 95(1), 161–182.
-4. Carare, A., Celis, J. P., Hadzi-Vaskov, M., & Morito, Y. (2025). *How Do Remittances Affect the Real Exchange Rate?* (IMF Working Paper WP/25/122). International Monetary Fund.
+4. Carare, A., Celis, J. P., Hadzi-Vaskov, M., & Morito, Y. (2025). *How do remittances affect the real exchange rate? An empirical investigation* (IMF Working Paper WP/25/122). International Monetary Fund.
 5. Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
 6. Acosta, P. A., Lartey, E. K. K., & Mandelman, F. S. (2007). *Remittances and the Dutch disease* (Working Paper 2007-8a). Federal Reserve Bank of Atlanta.
 7. Chowdhury, M. B., & Rabbi, F. (2014). Workers' remittances and Dutch disease in Bangladesh. *Journal of International Trade & Economic Development*, 23(4), 455–475.
@@ -180,10 +180,10 @@ rmarkdown::render("report/Report.Rmd", output_format = "pdf_document")
 
 ---
 
-## 📝 License
+## License
 
-This project is licensed under the **MIT License**. You are free to use, modify, and distribute the code and written content with attribution.
+This project is licensed under the **MIT License**. Use, modification, and redistribution are permitted with attribution.
 
 ---
 
-*Kosovariance — Valerio Di Federico. Developed as part of a Data Mining and Computational Statistics research project.*
+*Kosovariance — Valerio Di Federico. Data Mining and Computational Statistics research project.*
