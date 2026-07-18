@@ -1,223 +1,215 @@
 # Kosovariance: Methodology and Key Findings
 
-**Project:** Do Diaspora Remittances Appreciate Kosovo's Real Effective Exchange Rate?  
-**Author (advanced extension):** Valerio Di Federico  
-**Baseline collaboration:** University group project  
-**Dataset:** 137 monthly observations, January 2014 – May 2025  
+**Project:** Do Diaspora Remittances Appreciate Kosovo's Real Effective Exchange Rate?
+**Authors:** Valerio Di Federico et al.
+**Dataset:** 137 monthly observations, January 2014 – May 2025
 **Software:** R 4.5.2
 
 ---
 
 ## 1. Research Question
 
-This project empirically tests whether Kosovo's large diaspora remittance inflows trigger
-a **Dutch Disease** effect — defined as a significant appreciation of the Real Effective
-Exchange Rate (REER) — or whether the incoming foreign currency is instead absorbed through
-an alternative **Import Leakage Channel** that immediately worsens the trade deficit without
-creating inflationary pressure on the domestic economy.
+This project empirically tests whether Kosovo's large diaspora remittance inflows trigger a **Dutch Disease** effect — defined as a significant appreciation of the Real Effective Exchange Rate (REER) — or whether the incoming foreign currency is instead absorbed through an **Import Leakage Channel** that immediately worsens the trade deficit without creating inflationary pressure on the domestic economy.
 
-The distinction matters for policy: if Dutch Disease is active, policymakers should restrict
-capital inflows; if the leakage channel dominates, the mandate shifts to productive
-investment policy (e.g. Diaspora Bonds) to retain the liquidity domestically.
+The distinction matters for policy: if Dutch Disease is active, policymakers should restrict or sterilise capital inflows; if the leakage channel dominates, the mandate shifts to productive investment policy (e.g. Diaspora Bonds) to retain liquidity domestically before it exits through imports.
 
 ---
 
 ## 2. Methodological Pipeline
 
-The analysis follows a rigorous, sequential time-series econometric pipeline:
+The analysis follows a sequential, diagnostic-driven econometric pipeline. Each modelling choice is grounded in the results of the preceding step — no specification is imposed a priori.
 
-### Step 1 — Unit Root Testing (ADF)
-We first establish the **integration order** of every variable using the Augmented
-Dickey-Fuller test (`urca::ur.df`, lag selection via AIC, max 12 lags for monthly data),
-with a `tseries::adf.test()` p-value cross-check. We test in levels (with trend + drift)
-and first differences (drift only).
+### Step 1 — OLS Baseline and Identification of the "Optical Illusion"
 
-**Rationale:** Knowing whether variables are I(0) or I(1) determines which cointegration
-framework is valid. Applying OLS in levels to non-stationary data produces spurious
-regressions.
+We begin with a naive OLS regression of REER in levels on Remittances, Inflation, and NEER. The baseline yields a significant **negative** coefficient on remittances — a result we identify as an "Exchange Rate Optical Illusion" caused by non-stationarity, collinearity, and the absence of seasonal controls. This finding motivates the transition to a disciplined time-series specification.
 
-### Step 2 — Heteroskedasticity Diagnostics
-We apply:
-- **Breusch-Pagan test** (Koenker 1981, studentized) on the baseline ARX model
-- **White test** (White 1980) via `skedastic::white_lm`
+### Step 2 — First-Difference ARX Specification with Seasonal Controls
 
-**Rationale:** Even if errors are homoskedastic, Newey-West HAC standard errors are
-retained throughout (they simultaneously address autocorrelation). These tests are
-diagnostic, not prescriptive.
+We build an Autoregressive model with eXogenous controls (ARX) in first differences, incorporating three lags of REER (t−1, t−4, t−12) to capture autocorrelation dynamics and a full matrix of **monthly seasonal dummy variables** to isolate the true macroeconomic signal from the "Diaspora Pulse" seasonal pattern. First-differencing is motivated by the non-stationarity suspected from the OLS step, and later formally validated by ADF testing.
 
-### Step 3 — ARDL Bounds Test (Primary Cointegration)
-We implement the **Pesaran, Shin & Smith (2001)** ARDL bounds testing procedure
-(`ARDL::auto_ardl`, `ARDL::bounds_f_test`, `ARDL::bounds_t_test`).
+### Step 3 — Newey-West HAC Standard Errors and Serial Correlation Diagnostics
 
-**Why ARDL, not Johansen?** The ADF results reveal a **mixed I(0)/I(1)** integration
-structure (see Section 3). The Johansen (1988) procedure assumes all variables are I(1).
-ARDL bounds testing is explicitly valid for any mixture of I(0) and I(1) variables, making
-it the methodologically correct choice for this dataset.
+**Newey-West HAC standard errors** (Newey & West, 1987) are applied throughout to ensure valid inference under potential heteroskedasticity and autocorrelation. A **Breusch-Godfrey serial correlation test** (p = 0.412) confirms the absence of residual serial correlation in the ARX model. **Variance Inflation Factor (VIF)** diagnostics confirm no harmful multicollinearity among the regressors.
 
-**Lag selection:** Automatic via AIC, maximum order 4 (appropriate for monthly frequency).  
-**Model:** `REER_EU ~ Remittances + Inflation + NEER + FDI + NX`  
-**Case III:** Unrestricted intercept, no deterministic trend.
+### Step 4 — Distributed Lag Leakage Model and Wald Test
 
-### Step 4 — UECM Long-Run Coefficient Estimation
-From the optimal ARDL model, we derive the **Unrestricted Error Correction Model (UECM)**
-to extract the structural long-run multipliers for each regressor. These multipliers
-represent the equilibrium effect on REER_EU of a permanent one-unit change in each variable.
+A separate **Distributed Lag (DL) model** is specified with Net Exports (ΔNX) as the dependent variable, including contemporaneous and lagged remittance terms (t, t−1, t−12) alongside inflation, REER, and seasonal controls. A **Wald test** on the sum of all remittance coefficients tests the cumulative 12-month leakage effect.
 
-### Step 5 — Leakage Channel Model (Distributed Lag)
-A distributed lag model tests whether Remittance shocks explain the Trade Deficit (ΔNX),
-establishing the Import Leakage Channel as the operative mechanism.
+### Step 5 — ADF Unit Root Testing
+
+We formally establish the **integration order** of every variable using the Augmented Dickey-Fuller test (`urca::ur.df`, AIC lag selection, max 12 lags for monthly data), cross-checked with `tseries::adf.test()` p-values. Tests are run in levels (with trend) and first differences (with drift).
+
+**Rationale:** The integration order determines which cointegration framework is valid. A mixed I(0)/I(1) dataset rules out the Johansen (1988) procedure and mandates the ARDL bounds approach.
+
+### Step 6 — Heteroskedasticity Diagnostics
+
+We apply the **Breusch-Pagan test** (studentized, `lmtest::bptest`) and the **White test** (`skedastic::white_lm`) to the ARX model residuals.
+
+**Rationale:** These tests are diagnostic, not prescriptive — Newey-West HAC SEs are retained regardless, as they simultaneously address autocorrelation. The tests confirm whether heteroskedasticity is a genuine concern.
+
+### Step 7 — ARDL Bounds Test (Primary Long-Run Cointegration)
+
+We implement the **Pesaran, Shin & Smith (2001)** ARDL bounds testing procedure (`ARDL::auto_ardl`, `ARDL::bounds_f_test`, `ARDL::bounds_t_test`) on the variable levels.
+
+**Why ARDL, not Johansen?** The ADF results reveal a mixed I(0)/I(1) structure. The Johansen procedure assumes all I(1). ARDL bounds testing is explicitly valid for any mixture of I(0) and I(1), making it the correct choice for this dataset.
+
+**Specification:** `REER_EU ~ Remittances + Inflation + NEER + FDI + NX` | Case III (unrestricted intercept, no deterministic trend) | Lag selection: AIC, maximum order 4.
+
+### Step 8 — UECM Long-Run Coefficient Estimation
+
+From the optimal ARDL model, we derive the **Unrestricted Error Correction Model (UECM)** to extract structural long-run multipliers for each regressor. These multipliers represent the equilibrium effect on REER_EU of a permanent one-unit change in each variable, along with the speed-of-adjustment parameter (δ).
+
+### Step 9 — Local Projections IV (Endogeneity and Eurozone Correction)
+
+We implement a **Local Projections IV (LP-IV)** framework (Jordà, 2005; Stock & Watson, 2018) to address two structural concerns: potential reverse causality between Remittances and REER, and the omission of Eurozone macroeconomic push-factors.
+
+**Step 9a — Shock construction:** Remittances are regressed on own lags (1, 2, 12), Eurozone variables (EA unemployment rate, EUR/USD, EA HICP — from Eurostat and FRED), and Kosovo domestic controls. The OLS residual is the exogenous remittance shock, orthogonal to all observable push-factors.
+
+**Step 9b — Local Projections:** For h = 0…12 months:
+```
+REER_{t+h} − REER_{t-1} = α_h + β_h · shock_t + Γ · controls_{t-1} + η_{t+h}
+```
+Newey-West HAC SEs (bandwidth = h+1). A **pairs bootstrap (B = 1,000)** corrects for generated-regressor bias from the two-step procedure.
 
 ---
 
 ## 3. Results
 
-### 3.1 Integration Orders (ADF Tests)
+### 3.1 OLS Baseline — The Optical Illusion
 
-| Variable | τ statistic (levels) | 5% Critical Value | Integration Order |
-|:---------|--------------------:|------------------:|:-----------------|
-| REER_EU | −2.483 | −3.412 | **I(1)** |
-| Remittances | −3.490 | −3.412 | **I(0)** |
-| Inflation | −2.836 | −3.412 | **I(1)** |
-| NEER | −2.419 | −3.412 | **I(1)** |
-| FDI | −6.036 | −3.412 | **I(0)** |
-| NX | −2.968 | −3.412 | **I(1)** |
+**OLS (levels):** Remittances coefficient = −0.0472 (p < 0.001) — spuriously negative.
+**ARX (first differences + seasonal dummies + NW-HAC):** Remittances coefficient = +0.0029 (p = 0.525) — effectively zero.
 
-The dataset is **mixed I(0)/I(1)**, validating the use of ARDL bounds testing.
+This dramatic sign reversal demonstrates that the entire apparent relationship in the OLS baseline was an artefact of non-stationarity and omitted seasonality, not a genuine macroeconomic channel.
 
-**Economic interpretation:** Remittances being I(0) is consistent with their seasonal,
-mean-reverting nature (the "Diaspora Pulse" — massive summer and December spikes that
-revert to baseline). REER and NEER, as persistent price-index levels, are correctly I(1).
+### 3.2 ARX Model Performance
 
-### 3.2 Heteroskedasticity Tests (on baseline ARX model)
+| Metric | Value |
+|:-------|------:|
+| Adjusted R² | 0.6315 |
+| Robust F-statistic | 47.91 (p < 0.001) |
+| Breusch-Godfrey (serial correlation) | p = 0.412 — not present |
+| Δ Remittances coefficient | 0.0029 (p = 0.525) |
+| Δ Inflation coefficient | 0.4202 (p < 0.001) |
+
+### 3.3 Import Leakage Channel (Distributed Lag Model)
+
+| Coefficient | Estimate | p-value | Interpretation |
+|:------------|--------:|--------:|:---------------|
+| Δ Remittances (contemporaneous) | −0.860 | 0.008 | 86 cents per dollar leak to imports instantly |
+| Δ Remittances (lag 1) | +0.412 | — | Partial reversal begins |
+| Δ Remittances (lag 12) | +0.694 | — | Further reversal at annual cycle |
+| **Cumulative 12-month effect (Wald)** | **≈ 0** | **0.633** | **Fully neutralised** |
+
+Model fit: Adj. R² = 0.747 | Robust F = 118.21 (p < 0.001)
+
+### 3.4 Integration Orders (ADF Tests)
+
+| Variable | τ (levels) | 5% CV | τ (Δ) | 5% CV | Order |
+|:---------|----------:|------:|------:|------:|:------|
+| REER_EU | −2.483 | −3.412 | −7.625 | −2.879 | **I(1)** |
+| Remittances | −3.490 | −3.412 | −9.551 | −2.879 | **I(0)** |
+| Inflation | −2.836 | −3.412 | −7.591 | −2.879 | **I(1)** |
+| NEER | −2.419 | −3.412 | −8.285 | −2.879 | **I(1)** |
+| FDI | −6.036 | −3.412 | −9.891 | −2.879 | **I(0)** |
+| NX | −2.968 | −3.412 | −6.869 | −2.879 | **I(1)** |
+
+**Mixed I(0)/I(1)** → ARDL bounds testing is the appropriate cointegration framework.
+
+### 3.5 Heteroskedasticity Tests
 
 | Test | Statistic | p-value | Conclusion |
 |:-----|----------:|--------:|:-----------|
 | Breusch-Pagan (df=19) | 27.40 | 0.095 | Fail to reject H₀ — homoskedastic |
-| White test | 2.20 | 0.333 | Fail to reject H₀ — homoskedastic |
+| White test (nR²) | 2.20 | 0.333 | Fail to reject H₀ — homoskedastic |
 
-Errors are homoskedastic. Newey-West HAC standard errors are retained as a conservative
-precaution against any autocorrelation, confirmed by the Breusch-Godfrey test in the
-baseline script.
+Errors are homoskedastic. Newey-West correction is precautionary.
 
-### 3.3 ARDL Bounds Test Results
+### 3.6 ARDL Bounds Test
 
-**Optimal ARDL model (AIC):** ARDL(2, 0, 0, 0, 2, 4) — for (REER_EU, Remittances,
-Inflation, NEER, FDI, NX) respectively.
+**Optimal model:** ARDL(2, 0, 0, 0, 2, 4) for (REER_EU, Remittances, Inflation, NEER, FDI, NX)
 
-| Test | Statistic | I(0) lower 5% | I(1) upper 5% | Decision |
-|:-----|----------:|--------------:|--------------:|:---------|
-| Bounds F-test | **5.2006** | 2.62 | 3.79 | **F > upper bound → Cointegration CONFIRMED** |
-| Bounds t-test | −2.869 | −2.86 | −1.99 | ECT significant → Error-correction confirmed |
+| Test | Statistic | I(0) 5% | I(1) 5% | Decision |
+|:-----|----------:|--------:|--------:|:---------|
+| Bounds F-test | **5.2006** | 2.62 | 3.79 | **Cointegration CONFIRMED** |
+| Bounds t-test | −2.869 | — | — | ECT significant |
 
-> **A statistically significant long-run cointegrating relationship between Kosovo's REER
-> and its macroeconomic fundamentals is confirmed at the 5% significance level.**
+### 3.7 Long-Run Multipliers (UECM)
 
-### 3.4 Long-Run Multipliers (UECM)
+| Variable | β | SE | p-value | Significant? |
+|:---------|--:|---:|--------:|:------------|
+| **NEER** | +0.6341 | 0.1110 | <0.001 | ✅ |
+| **NX** | +0.0024 | 0.0008 | 0.005 | ✅ |
+| **Remittances** | +0.0119 | 0.0106 | 0.268 | ❌ |
+| FDI | −0.0016 | 0.0012 | 0.187 | ❌ |
+| Inflation | +0.0160 | 0.0608 | 0.793 | ❌ |
 
-| Variable | Long-Run β | Std. Error | p-value | Significant? |
-|:---------|----------:|----------:|--------:|:------------|
-| **NEER** | **+0.6341** | 0.1110 | **<0.001** | ✅ Yes |
-| **NX** | **+0.0024** | 0.0008 | **0.005** | ✅ Yes |
-| **Remittances** | +0.0119 | 0.0106 | **0.268** | ❌ **No** |
-| FDI | −0.0016 | 0.0012 | 0.187 | ❌ No |
-| Inflation | +0.0160 | 0.0608 | 0.793 | ❌ No |
+**Speed of adjustment:** δ = −0.389 (p = 0.005) | UECM Adj. R² = 0.504
 
-**Speed of adjustment (ECT):** δ = −0.389 (p = 0.005)
+### 3.8 LP-IV Results
 
-UECM model fit: R² = 0.564, Adj. R² = 0.504, F(13, 92) = 9.48, p < 2.2×10⁻¹⁶
-
-### 3.5 Leakage Channel (Baseline Distributed Lag Model)
-
-From the original ARX Distributed Lag model (Δ NX ~ Δ Remittances + Δ Remittances_{t-1}
-+ Δ Remittances_{t-12} + controls + monthly dummies):
-
-| Coefficient | Estimate | Std. Error (NW) | p-value |
-|:------------|--------:|----------------:|--------:|
-| Δ Remittances (contemporaneous) | −0.860 | — | 0.008 |
-| Δ Remittances (lag 1) | +0.412 | — | — |
-| Δ Remittances (lag 12) | +0.694 | — | — |
-| **Cumulative 12-month effect** | **≈ 0** | — | **0.633** |
-
-Model fit: Adj. R² = 0.747, Robust F = 118.21 (p < 0.001)
+| Metric | REER | NX (Leakage) |
+|:-------|:-----|:-------------|
+| Significant horizons (90% bootstrap CI) | **0 / 13** | **1 / 13** (h=0 only) |
+| Peak response | β = −0.005 at h=11 | β = −0.59 at h=0 |
+| Joint bootstrap p-value | 0.831 | — |
+| Wu-Hausman endogeneity test | p = 0.304 — **not detected** | — |
+| Sargan overidentification | p = 0.632 — **instruments valid** | — |
 
 ---
 
-## 4. Core Economic Conclusion
+## 4. Core Economic Conclusions
 
-### The Dutch Disease Hypothesis Is Rejected
+### Dutch Disease: Rejected at Every Methodological Layer
 
-The long-run ARDL multiplier for remittances is **β = +0.012, p = 0.268** — statistically
-indistinguishable from zero. Even after establishing a confirmed cointegrating equilibrium
-(ARDL Bounds F = 5.20, p = 0.043), **remittances play no role in that equilibrium**.
+| Method | Remittances → REER | Verdict |
+|:-------|:-------------------|:--------|
+| ARX (short-run) | β = 0.003, p = 0.525 | ❌ Rejected |
+| ARDL UECM (long-run) | β = 0.012, p = 0.268 | ❌ Rejected |
+| LP-IV (all horizons) | 0/13 significant | ❌ Rejected |
 
-The dominant long-run force shaping Kosovo's REER is the **Nominal Effective Exchange Rate**
-(β = 0.634, p < 0.001) — reflecting mechanical exchange rate pass-through from Kosovo's
-euroized monetary regime, not diaspora inflows.
+The dominant long-run force shaping Kosovo's REER is the **Nominal Effective Exchange Rate** (β = 0.634, p < 0.001) — mechanical exchange rate pass-through from euroisation, not diaspora inflows.
 
-### The Import Leakage Channel Is Confirmed
+### Import Leakage Channel: Confirmed
 
-The mechanism by which remittances fail to appreciate the REER is the **Import Leakage
-Channel**: for every dollar of diaspora money entering Kosovo in any given month, **86 cents
-immediately exits the domestic economy** to finance foreign imports, preventing any domestic
-price pressure from building. This shock fully neutralises over a 12-month horizon (cumulative
-Wald test p = 0.633).
+For every dollar of diaspora money entering Kosovo, **86 cents immediately exits** to finance foreign imports. This shock fully neutralises over a 12-month horizon (Wald test p = 0.633). Kosovo operates as a **pass-through economy**: diaspora liquidity enters, is spent on foreign goods, and exits — without leaving a macroeconomic footprint on the REER.
 
-Kosovo operates as a **pass-through economy**: diaspora liquidity enters, is spent on foreign
-goods, and exits — without leaving a domestic macroeconomic footprint in the REER.
-
-### Alignment with Contemporary Literature
-
-These findings directly validate the 2025 IMF Working Paper by Carare et al. (WP/25/122),
-which argues that in heavily import-dependent economies operating under fixed or stabilised
-exchange rate regimes, structural import reliance acts as a pressure release valve that
-naturally neutralises Dutch Disease appreciation.
+These findings directly validate the 2025 IMF Working Paper by Carare et al. (WP/25/122), which argues that in heavily import-dependent euroized economies, structural import reliance acts as a natural pressure release valve.
 
 ---
 
 ## 5. Policy Implications
 
-Because **86% of each remittance dollar leaks into imports**, the policy mandate should not
-be to restrict capital inflows (Dutch Disease fear is empirically unwarranted), but to
-**capture remittances before they leak**:
+Because 86% of each remittance dollar leaks into imports, the policy mandate should be to **capture remittances before they leak**, not to restrict inflows:
 
-1. **Diaspora Bonds** — formalized instruments to channel private diaspora transfers into
-   domestic productive investment
-2. **Import-substitution industrial policy** — develop domestic value chains for goods
-   currently imported from the diaspora spending
-3. **Remittance-linked savings products** — incentivise local business creation over
-   consumption
+1. **Diaspora Bonds** — formalised instruments to channel private diaspora transfers into domestic productive investment
+2. **Import-substitution industrial policy** — develop domestic value chains for goods currently purchased from diaspora spending
+3. **Remittance-linked savings products** — incentivise local business creation over consumption spending
 
 ---
 
 ## 6. Limitations
 
-- **Informal remittances** (cash physically carried by returning diaspora) are unobservable
-  in official Central Bank data; these likely amplify the Diaspora Pulse
-- **Sector-level price data** would allow cleaner decomposition between tradable and
-  non-tradable inflation
-- **Real interest rate dynamics** are not included, which could explain additional
-  short-run REER movements
-- Sample length (137 observations) limits the statistical power of some lag structures
+- Informal remittances (cash carried by returning diaspora) are unobservable in official data
+- Sector-level pricing data would allow cleaner tradable/non-tradable decomposition
+- Real interest rate dynamics are excluded from the current specification
+- Sample length (T=137) limits power for very long lag structures
+- LP-IV instrument relevance (partial F=6.40) is marginally below the strong-instrument threshold; the Wu-Hausman non-rejection renders this practically moot
 
 ---
 
 ## 7. References
 
-Carare, A., Celis, J. P., Hadzi-Vaskov, M., & Morito, Y. (2025). *How Do Remittances
-Affect the Real Exchange Rate? An Empirical Investigation* (IMF Working Paper WP/25/122).
-Washington, DC: International Monetary Fund.
+Carare, A., Celis, J. P., Hadzi-Vaskov, M., & Morito, Y. (2025). *How Do Remittances Affect the Real Exchange Rate?* (IMF Working Paper WP/25/122). International Monetary Fund.
 
-Corden, W. M., & Neary, J. P. (1982). Booming Sector and De-Industrialisation in a Small
-Open Economy. *The Economic Journal*, 92(368), 825–848.
+Corden, W. M., & Neary, J. P. (1982). Booming Sector and De-Industrialisation in a Small Open Economy. *The Economic Journal*, 92(368), 825–848.
 
-Pesaran, M. H., Shin, Y., & Smith, R. J. (2001). Bounds testing approaches to the analysis
-of level relationships. *Journal of Applied Econometrics*, 16(3), 289–326.
+Jordà, Ò. (2005). Estimation and inference of impulse responses by local projections. *American Economic Review*, 95(1), 161–182.
 
-Acosta, P. A., Lartey, E. K. K., & Mandelman, F. S. (2007). *Remittances and the Dutch
-disease* (Working Paper No. 2007-8a). Federal Reserve Bank of Atlanta.
+Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
 
-Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity
-and autocorrelation consistent covariance matrix. *Econometrica*, 55(3), 703–708.
+Pesaran, M. H., Shin, Y., & Smith, R. J. (2001). Bounds testing approaches to the analysis of level relationships. *Journal of Applied Econometrics*, 16(3), 289–326.
 
-White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct
-test for heteroskedasticity. *Econometrica*, 48(4), 817–838.
+Acosta, P. A., Lartey, E. K. K., & Mandelman, F. S. (2007). *Remittances and the Dutch disease* (Working Paper 2007-8a). Federal Reserve Bank of Atlanta.
+
+White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct test for heteroskedasticity. *Econometrica*, 48(4), 817–838.
